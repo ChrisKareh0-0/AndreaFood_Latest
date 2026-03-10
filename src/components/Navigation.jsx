@@ -56,9 +56,7 @@ function Navigation() {
           ))}
         </ul>
 
-        <Link to="/login" className="nav-link login-btn-floating">
-          {siteText.navigation.login}
-        </Link>
+        {/* Login button hidden as requested */}
 
         <div className="mobile-menu-icon">
           <span></span>

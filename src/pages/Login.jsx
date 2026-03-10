@@ -14,7 +14,7 @@ function Login() {
     e.preventDefault()
 
     // Simple authentication - in production, this should be handled by a backend
-    if (username === 'admin' && password === 'admin123') {
+    if (username === 'Chris' && password === 'ashenone') {
       localStorage.setItem('isAuthenticated', 'true')
       navigate('/admin')
     } else {
