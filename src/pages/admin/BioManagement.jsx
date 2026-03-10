@@ -4,44 +4,31 @@ import { defaultLatestWorkPosts } from '@/content/latestWork';
 import './Management.css';
 
 function BioManagement() {
-  const defaultContent = {
-    aboutTitle: 'A Glimpse into the Journey..',
-    aboutParagraph1: 'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat. Ut wisi enim ad minim veniam, quis nostrud exerci tation ullamcorper suscipit lobortis nisl ut aliquip ex ea commodo consequat.',
-    aboutParagraph2: 'Duis autem vel eum iriure dolor in hendrerit in vulputate velit esse molestie consequat, vel illum dolore eu feugiat nulla facilisis at vero eros et accumsan et iusto odio dignissim qui blandit praesent luptatum zzril delenit augue duis dolore te feugait onummy nibh euismod tincidunt ut laoreet dolore.',
-    servicesDescription: 'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat.',
-    contactSubtitle: 'Ready to bring your culinary vision to life?',
-    contactDescription: "Let's discuss your next foodstyling project & create something truly mouth-watering."
-  };
-
-  const [content, setContent] = useState(defaultContent);
-  const [siteText, setSiteText] = useState(defaultSiteText);
-  const [latestWorkPosts, setLatestWorkPosts] = useState(defaultLatestWorkPosts);
+  const [content, setContent] = useState(null);
+  const [siteText, setSiteText] = useState(null);
+  const [latestWorkPosts, setLatestWorkPosts] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({ ...defaultContent, siteText: defaultSiteText, latestWorkPosts: defaultLatestWorkPosts });
+  const [formData, setFormData] = useState({});
 
   useEffect(() => {
     async function fetchAdminData() {
       try {
         const bioRes = await fetch('/api/admin-data/bioContent');
-        if (bioRes.ok) {
-          const bioData = await bioRes.json();
-          setContent(bioData.value);
-          setFormData((prev) => ({ ...prev, ...bioData.value }));
-        }
         const siteTextRes = await fetch('/api/admin-data/siteText');
-        if (siteTextRes.ok) {
-          const siteTextData = await siteTextRes.json();
-          setSiteText(siteTextData.value);
-          setFormData((prev) => ({ ...prev, siteText: siteTextData.value }));
-        }
         const latestWorkRes = await fetch('/api/admin-data/latestWorkPosts');
-        if (latestWorkRes.ok) {
-          const latestWorkData = await latestWorkRes.json();
-          setLatestWorkPosts(latestWorkData.value);
-          setFormData((prev) => ({ ...prev, latestWorkPosts: latestWorkData.value }));
-        }
+        const bioData = bioRes.ok ? await bioRes.json() : null;
+        const siteTextData = siteTextRes.ok ? await siteTextRes.json() : null;
+        const latestWorkData = latestWorkRes.ok ? await latestWorkRes.json() : null;
+        setContent(bioData?.value || {});
+        setSiteText(siteTextData?.value || {});
+        setLatestWorkPosts(latestWorkData?.value || []);
+        setFormData({
+          ...(bioData?.value || {}),
+          siteText: siteTextData?.value || {},
+          latestWorkPosts: latestWorkData?.value || [],
+        });
       } catch (err) {
-        // fallback to defaults
+        // show error or keep empty
       }
     }
     fetchAdminData();
@@ -167,37 +154,37 @@ function BioManagement() {
             <div className="content-section">
               <h3>About Section</h3>
               <div className="content-preview">
-                <h4>{content.aboutTitle}</h4>
-                <p>{content.aboutParagraph1}</p>
-                <p>{content.aboutParagraph2}</p>
+                <h4>{content?.aboutTitle}</h4>
+                <p>{content?.aboutParagraph1}</p>
+                <p>{content?.aboutParagraph2}</p>
               </div>
             </div>
             <div className="content-section">
               <h3>Services Description</h3>
               <div className="content-preview">
-                <p>{content.servicesDescription}</p>
+                <p>{content?.servicesDescription}</p>
               </div>
             </div>
             <div className="content-section">
               <h3>Contact Section</h3>
               <div className="content-preview">
-                <p><strong>Subtitle:</strong> {content.contactSubtitle}</p>
-                <p><strong>Description:</strong> {content.contactDescription}</p>
+                <p><strong>Subtitle:</strong> {content?.contactSubtitle}</p>
+                <p><strong>Description:</strong> {content?.contactDescription}</p>
               </div>
             </div>
             <div className="content-section">
               <h3>Front Site Text</h3>
               <div className="content-preview">
-                <p><strong>Navigation:</strong> {siteText.navigation.home} / {siteText.navigation.journey} / {siteText.navigation.clients} / {siteText.navigation.myWork} / {siteText.navigation.creativeServices} / {siteText.navigation.letsConnect}</p>
-                <p><strong>Clients Gallery:</strong> {siteText.clientsGallery.title}</p>
-                <p><strong>Footer:</strong> {siteText.footer.copyrightPrefix} … {siteText.footer.allRightsReservedSuffix}</p>
-                <p><strong>Login:</strong> {siteText.login.title}</p>
+                <p><strong>Navigation:</strong> {siteText?.navigation?.home} / {siteText?.navigation?.journey} / {siteText?.navigation?.clients} / {siteText?.navigation?.myWork} / {siteText?.navigation?.creativeServices} / {siteText?.navigation?.letsConnect}</p>
+                <p><strong>Clients Gallery:</strong> {siteText?.clientsGallery?.title}</p>
+                <p><strong>Footer:</strong> {siteText?.footer?.copyrightPrefix} … {siteText?.footer?.allRightsReservedSuffix}</p>
+                <p><strong>Login:</strong> {siteText?.login?.title}</p>
               </div>
             </div>
             <div className="content-section">
               <h3>Latest Work Posts</h3>
               <div className="content-preview">
-                {latestWorkPosts.map((p) => (
+                {(latestWorkPosts || []).map((p) => (
                   <p key={p.id}><strong>{p.title || 'Untitled'}:</strong> {p.excerpt || 'No excerpt yet.'}</p>
                 ))}
               </div>
