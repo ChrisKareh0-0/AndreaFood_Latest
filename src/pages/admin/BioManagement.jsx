@@ -1,12 +1,9 @@
-import { useState } from 'react'
-import { defaultSiteText, loadSiteText, saveSiteText } from '@/content/siteText'
-import { defaultLatestWorkPosts, loadLatestWorkPosts, saveLatestWorkPosts } from '@/content/latestWork'
+import { useState, useEffect } from 'react'
+import { defaultSiteText } from '@/content/siteText'
+import { defaultLatestWorkPosts } from '@/content/latestWork'
 import './Management.css'
-import { useToast } from '../../hooks/useToast'
-import { ToastContainer } from '../../components/Toast'
 
 function BioManagement() {
-  const { toasts, showToast, removeToast } = useToast()
   const defaultContent = {
     aboutTitle: 'A Glimpse into the Journey..',
     aboutParagraph1: 'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat. Ut wisi enim ad minim veniam, quis nostrud exerci tation ullamcorper suscipit lobortis nisl ut aliquip ex ea commodo consequat.',
@@ -16,13 +13,35 @@ function BioManagement() {
     contactDescription: "Let's discuss your next foodstyling project & create something truly mouth-watering."
   }
 
-  const [content, setContent] = useState(() => {
-    const saved = localStorage.getItem('bioContent')
-    return saved ? JSON.parse(saved) : defaultContent
-  })
+  const [content, setContent] = useState(defaultContent)
+  const [siteText, setSiteText] = useState(defaultSiteText)
+  const [latestWorkPosts, setLatestWorkPosts] = useState(defaultLatestWorkPosts)
 
-  const [siteText, setSiteText] = useState(() => loadSiteText())
-  const [latestWorkPosts, setLatestWorkPosts] = useState(() => loadLatestWorkPosts())
+  // Load admin data from backend
+  useEffect(() => {
+    async function fetchAdminData() {
+      try {
+        const bioRes = await fetch('/api/admin-data/bioContent')
+        if (bioRes.ok) {
+          const bioData = await bioRes.json()
+          setContent(bioData.value)
+        }
+        const siteTextRes = await fetch('/api/admin-data/siteText')
+        if (siteTextRes.ok) {
+          const siteTextData = await siteTextRes.json()
+          setSiteText(siteTextData.value)
+        }
+        const latestWorkRes = await fetch('/api/admin-data/latestWorkPosts')
+        if (latestWorkRes.ok) {
+          const latestWorkData = await latestWorkRes.json()
+          setLatestWorkPosts(latestWorkData.value)
+        }
+      } catch (err) {
+        // fallback to defaults
+      }
+    }
+    fetchAdminData()
+  }, [])
 
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({ ...content, siteText, latestWorkPosts })
@@ -83,47 +102,52 @@ function BioManagement() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    const {
+      aboutTitle,
+      aboutParagraph1,
+      aboutParagraph2,
+      servicesDescription,
+      contactSubtitle,
+      contactDescription,
+      siteText: nextSiteText,
+      latestWorkPosts: nextLatestWorkPosts
+    } = formData
 
-    try {
-      const {
-        aboutTitle,
-        aboutParagraph1,
-        aboutParagraph2,
-        servicesDescription,
-        contactSubtitle,
-        contactDescription,
-        siteText: nextSiteText,
-        latestWorkPosts: nextLatestWorkPosts
-      } = formData
-
-      const nextBio = {
-        aboutTitle,
-        aboutParagraph1,
-        aboutParagraph2,
-        servicesDescription,
-        contactSubtitle,
-        contactDescription
-      }
-
-      setContent(nextBio)
-      localStorage.setItem('bioContent', JSON.stringify(nextBio))
-
-      const mergedSiteText = nextSiteText ? nextSiteText : defaultSiteText
-      setSiteText(mergedSiteText)
-      saveSiteText(mergedSiteText)
-
-      const postsToSave = Array.isArray(nextLatestWorkPosts) && nextLatestWorkPosts.length > 0
-        ? nextLatestWorkPosts
-        : defaultLatestWorkPosts
-      setLatestWorkPosts(postsToSave)
-      saveLatestWorkPosts(postsToSave)
-
-      showToast('Bio and content saved successfully!', 'success')
-      setIsEditing(false)
-    } catch (error) {
-      showToast('Failed to save content. Please try again.', 'error')
-      console.error('Save error:', error)
+    const nextBio = {
+      aboutTitle,
+      aboutParagraph1,
+      aboutParagraph2,
+      servicesDescription,
+      contactSubtitle,
+      contactDescription
     }
+
+    setContent(nextBio)
+    setSiteText(nextSiteText ? nextSiteText : defaultSiteText)
+    const postsToSave = Array.isArray(nextLatestWorkPosts) && nextLatestWorkPosts.length > 0
+      ? nextLatestWorkPosts
+      : defaultLatestWorkPosts
+    setLatestWorkPosts(postsToSave)
+
+    // Save to backend
+    Promise.all([
+      fetch('/api/admin-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'bioContent', value: nextBio })
+      }),
+      fetch('/api/admin-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'siteText', value: nextSiteText })
+      }),
+      fetch('/api/admin-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'latestWorkPosts', value: postsToSave })
+      })
+    ]).then(() => setIsEditing(false))
+  }
   }
 
   const handleCancel = () => {
@@ -133,7 +157,6 @@ function BioManagement() {
 
   return (
     <div className="management-section">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="section-header">
         <h2>Bio & Content Management</h2>
         {!isEditing ? (
