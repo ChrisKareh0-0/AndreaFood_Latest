@@ -1,80 +1,8 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
-import './ClientsGalleryNew.css'
 
-const clientsData = [
-    {
-        id: 1,
-        name: 'Mövenpick Hotels',
-        description: 'Luxury dessert styling campaign',
-        category: 'Photoshoot',
-        image: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800&q=80'
-    },
-    {
-        id: 2,
-        name: 'Nestlé Middle East',
-        description: 'Fresh ingredients photoshoot',
-        category: 'TVC',
-        image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80'
-    },
-    {
-        id: 3,
-        name: 'Le Pain Quotidien',
-        description: 'Artisan bakery collection',
-        category: 'Photoshoot',
-        image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800&q=80'
-    },
-    {
-        id: 4,
-        name: 'Starbucks Lebanon',
-        description: 'Coffee & pastries menu',
-        category: 'Commercial',
-        image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80'
-    },
-    {
-        id: 5,
-        name: 'Carrefour',
-        description: 'Gourmet dining campaign',
-        category: 'Editorial',
-        image: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80'
-    },
-    {
-        id: 6,
-        name: 'Spinneys',
-        description: 'Organic produce showcase',
-        category: 'Photoshoot',
-        image: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=800&q=80'
-    },
-    {
-        id: 7,
-        name: 'Zaatar W Zeit',
-        description: 'Lebanese cuisine styling',
-        category: 'TVC',
-        image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&q=80'
-    },
-    {
-        id: 8,
-        name: 'Patchi Chocolatier',
-        description: 'Premium chocolate styling',
-        category: 'Editorial',
-        image: 'https://images.unsplash.com/photo-1481391243133-f96216dcb5d2?w=800&q=80'
-    },
-    {
-        id: 9,
-        name: 'ABC Ashrafieh',
-        description: 'Fine dining campaign',
-        category: 'Commercial',
-        image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80'
-    },
-    {
-        id: 10,
-        name: 'Barbar Restaurant',
-        description: 'Lebanese mezze spread',
-        category: 'Photoshoot',
-        image: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=800&q=80'
-    }
-]
+// Accept clientsData as a prop or fetch from backend/admin panel
 
 const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial']
 

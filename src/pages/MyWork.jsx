@@ -11,14 +11,7 @@ function MyWork() {
 
   const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
 
-  // Sample clients data with categories
-  const [clients] = useState([
-    { id: 1, name: 'Client 1', logo: '', categories: ['TVC', 'Photoshoot'], description: 'Sample client' },
-    { id: 2, name: 'Client 2', logo: '', categories: ['TVC'], description: 'Sample client' },
-    { id: 3, name: 'Client 3', logo: '', categories: ['Photoshoot'], description: 'Sample client' },
-    { id: 4, name: 'Client 4', logo: '', categories: ['Commercial', 'TVC'], description: 'Sample client' },
-    { id: 5, name: 'Client 5', logo: '', categories: ['Editorial'], description: 'Sample client' }
-  ])
+  // Accept clients as a prop or fetch from backend/admin panel
 
   const filteredClients = clients.filter(client => {
     const matchesCategory = activeFilter === 'All' || client.categories.includes(activeFilter)
