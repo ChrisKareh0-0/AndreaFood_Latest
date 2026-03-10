@@ -1,12 +1,7 @@
 import { useState, useEffect } from 'react'
 import './Management.css'
-import { useToast } from '../../hooks/useToast'
-import { ToastContainer } from '../../components/Toast'
-import ImageUploader from '../../components/ImageUploader'
 
 function PersonalDataManagement() {
-  const { toasts, showToast, removeToast } = useToast()
-
   const [personalData, setPersonalData] = useState(() => {
     const saved = localStorage.getItem('personalData')
     return saved ? JSON.parse(saved) : {
@@ -24,22 +19,22 @@ function PersonalDataManagement() {
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState(personalData)
 
+  const handleFileUpload = (e, field) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setFormData({ ...formData, [field]: reader.result })
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
-
-    try {
-      setPersonalData(formData)
-      localStorage.setItem('personalData', JSON.stringify(formData))
-      showToast('Personal data saved successfully!', 'success')
-      setIsEditing(false)
-    } catch (error) {
-      if (error.name === 'QuotaExceededError') {
-        showToast('Storage quota exceeded. Please use smaller images or URLs.', 'error')
-      } else {
-        showToast('Failed to save data. Please try again.', 'error')
-      }
-      console.error('Save error:', error)
-    }
+    setPersonalData(formData)
+    localStorage.setItem('personalData', JSON.stringify(formData))
+    setIsEditing(false)
   }
 
   const handleCancel = () => {
@@ -49,7 +44,6 @@ function PersonalDataManagement() {
 
   return (
     <div className="management-section">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="section-header">
         <h2>Personal Data</h2>
         {!isEditing ? (
@@ -197,48 +191,54 @@ function PersonalDataManagement() {
               <div className="form-card">
                 <h3>Images</h3>
                 <div className="form-group">
-                  <label>Hero Image URL</label>
+                  <label>Hero Image</label>
                   <input
                     type="text"
                     value={formData.heroImage}
                     onChange={(e) => setFormData({ ...formData, heroImage: e.target.value })}
-                    placeholder="Enter image URL (e.g., https://example.com/image.jpg)"
+                    placeholder="Enter hero image URL or upload below"
                   />
-                  <ImageUploader
-                    label="Upload & Compress Image"
-                    maxSizeKB={500}
-                    onUploadComplete={(base64) => {
-                      setFormData({ ...formData, heroImage: base64 })
-                      showToast('Image compressed and uploaded successfully!', 'success')
-                    }}
-                  />
-                  {formData.heroImage && (
-                    <div className="image-preview">
-                      <img src={formData.heroImage} alt="Hero preview" onError={(e) => e.target.src = 'https://via.placeholder.com/400x200?text=Invalid+URL'} />
-                    </div>
-                  )}
+                  <div className="file-upload-container">
+                    <label className="file-upload-btn">
+                      📁 Upload Hero Image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileUpload(e, 'heroImage')}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    {formData.heroImage && (
+                      <div className="image-preview">
+                        <img src={formData.heroImage} alt="Hero preview" />
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
-                  <label>Profile Image URL (Meet the Artist)</label>
+                  <label>Profile Image (Meet the Artist)</label>
                   <input
                     type="text"
                     value={formData.profileImage}
                     onChange={(e) => setFormData({ ...formData, profileImage: e.target.value })}
-                    placeholder="Enter image URL (e.g., https://example.com/profile.jpg)"
+                    placeholder="Enter profile image URL or upload below"
                   />
-                  <ImageUploader
-                    label="Upload & Compress Image"
-                    maxSizeKB={500}
-                    onUploadComplete={(base64) => {
-                      setFormData({ ...formData, profileImage: base64 })
-                      showToast('Image compressed and uploaded successfully!', 'success')
-                    }}
-                  />
-                  {formData.profileImage && (
-                    <div className="image-preview">
-                      <img src={formData.profileImage} alt="Profile preview" onError={(e) => e.target.src = 'https://via.placeholder.com/400x200?text=Invalid+URL'} />
-                    </div>
-                  )}
+                  <div className="file-upload-container">
+                    <label className="file-upload-btn">
+                      📁 Upload Profile Image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileUpload(e, 'profileImage')}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    {formData.profileImage && (
+                      <div className="image-preview">
+                        <img src={formData.profileImage} alt="Profile preview" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

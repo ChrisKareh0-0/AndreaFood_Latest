@@ -97,6 +97,11 @@ function MyWork() {
                   )}
                 </div>
                 <p className="carousel-client-name">{client.name}</p>
+                <div className="client-categories">
+                  {client.categories.map((cat, idx) => (
+                    <span key={idx} className="category-badge">{cat}</span>
+                  ))}
+                </div>
               </div>
             ))
           ) : (

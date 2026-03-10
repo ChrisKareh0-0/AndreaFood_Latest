@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
-import { defaultSiteText } from '@/content/siteText'
-import { defaultLatestWorkPosts } from '@/content/latestWork'
-import './Management.css'
+import { useState, useEffect } from 'react';
+import { defaultSiteText } from '@/content/siteText';
+import { defaultLatestWorkPosts } from '@/content/latestWork';
+import './Management.css';
 
 function BioManagement() {
   const defaultContent = {
@@ -11,40 +11,41 @@ function BioManagement() {
     servicesDescription: 'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat.',
     contactSubtitle: 'Ready to bring your culinary vision to life?',
     contactDescription: "Let's discuss your next foodstyling project & create something truly mouth-watering."
-  }
+  };
 
-  const [content, setContent] = useState(defaultContent)
-  const [siteText, setSiteText] = useState(defaultSiteText)
-  const [latestWorkPosts, setLatestWorkPosts] = useState(defaultLatestWorkPosts)
+  const [content, setContent] = useState(defaultContent);
+  const [siteText, setSiteText] = useState(defaultSiteText);
+  const [latestWorkPosts, setLatestWorkPosts] = useState(defaultLatestWorkPosts);
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({ ...defaultContent, siteText: defaultSiteText, latestWorkPosts: defaultLatestWorkPosts });
 
-  // Load admin data from backend
   useEffect(() => {
     async function fetchAdminData() {
       try {
-        const bioRes = await fetch('/api/admin-data/bioContent')
+        const bioRes = await fetch('/api/admin-data/bioContent');
         if (bioRes.ok) {
-          const bioData = await bioRes.json()
-          setContent(bioData.value)
+          const bioData = await bioRes.json();
+          setContent(bioData.value);
+          setFormData((prev) => ({ ...prev, ...bioData.value }));
         }
-        const siteTextRes = await fetch('/api/admin-data/siteText')
+        const siteTextRes = await fetch('/api/admin-data/siteText');
         if (siteTextRes.ok) {
-          const siteTextData = await siteTextRes.json()
-          setSiteText(siteTextData.value)
+          const siteTextData = await siteTextRes.json();
+          setSiteText(siteTextData.value);
+          setFormData((prev) => ({ ...prev, siteText: siteTextData.value }));
         }
-        const latestWorkRes = await fetch('/api/admin-data/latestWorkPosts')
+        const latestWorkRes = await fetch('/api/admin-data/latestWorkPosts');
         if (latestWorkRes.ok) {
-          const latestWorkData = await latestWorkRes.json()
-          setLatestWorkPosts(latestWorkData.value)
+          const latestWorkData = await latestWorkRes.json();
+          setLatestWorkPosts(latestWorkData.value);
+          setFormData((prev) => ({ ...prev, latestWorkPosts: latestWorkData.value }));
         }
       } catch (err) {
         // fallback to defaults
       }
     }
-    fetchAdminData()
-  }, [])
-
-  const [isEditing, setIsEditing] = useState(false)
-  const [formData, setFormData] = useState({ ...content, siteText, latestWorkPosts })
+    fetchAdminData();
+  }, []);
 
   const handleSiteTextChange = (section, field, value) => {
     setFormData((prev) => ({
@@ -52,56 +53,55 @@ function BioManagement() {
       siteText: {
         ...prev.siteText,
         [section]: {
-          ...prev.siteText?.[section],
-          [field]: value
-        }
-      }
-    }))
-  }
+          ...prev.siteText[section],
+          [field]: value,
+        },
+      },
+    }));
+  };
 
   const handleLatestWorkPostChange = (id, field, value) => {
     setFormData((prev) => ({
       ...prev,
-      latestWorkPosts: (prev.latestWorkPosts || []).map((p) =>
+      latestWorkPosts: prev.latestWorkPosts.map((p) =>
         p.id === id ? { ...p, [field]: value } : p
-      )
-    }))
-  }
+      ),
+    }));
+  };
 
   const handleLatestWorkImageUpload = (e, id) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
     reader.onloadend = () => {
-      const result = typeof reader.result === 'string' ? reader.result : ''
-      handleLatestWorkPostChange(id, 'imageUrl', result)
-    }
-    reader.readAsDataURL(file)
-  }
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      handleLatestWorkPostChange(id, 'imageUrl', result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleAddLatestWorkPost = () => {
     const newPost = {
       id: Date.now(),
       title: '',
       excerpt: '',
-      imageUrl: ''
-    }
+      imageUrl: '',
+    };
     setFormData((prev) => ({
       ...prev,
-      latestWorkPosts: [...(prev.latestWorkPosts || []), newPost]
-    }))
-  }
+      latestWorkPosts: [...prev.latestWorkPosts, newPost],
+    }));
+  };
 
   const handleDeleteLatestWorkPost = (id) => {
     setFormData((prev) => ({
       ...prev,
-      latestWorkPosts: (prev.latestWorkPosts || []).filter((p) => p.id !== id)
-    }))
-  }
+      latestWorkPosts: prev.latestWorkPosts.filter((p) => p.id !== id),
+    }));
+  };
 
   const handleSubmit = (e) => {
-    e.preventDefault()
+    e.preventDefault();
     const {
       aboutTitle,
       aboutParagraph1,
@@ -110,8 +110,8 @@ function BioManagement() {
       contactSubtitle,
       contactDescription,
       siteText: nextSiteText,
-      latestWorkPosts: nextLatestWorkPosts
-    } = formData
+      latestWorkPosts: nextLatestWorkPosts,
+    } = formData;
 
     const nextBio = {
       aboutTitle,
@@ -119,41 +119,36 @@ function BioManagement() {
       aboutParagraph2,
       servicesDescription,
       contactSubtitle,
-      contactDescription
-    }
+      contactDescription,
+    };
 
-    setContent(nextBio)
-    setSiteText(nextSiteText ? nextSiteText : defaultSiteText)
-    const postsToSave = Array.isArray(nextLatestWorkPosts) && nextLatestWorkPosts.length > 0
-      ? nextLatestWorkPosts
-      : defaultLatestWorkPosts
-    setLatestWorkPosts(postsToSave)
+    setContent(nextBio);
+    setSiteText(nextSiteText);
+    setLatestWorkPosts(nextLatestWorkPosts);
 
-    // Save to backend
     Promise.all([
       fetch('/api/admin-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'bioContent', value: nextBio })
+        body: JSON.stringify({ key: 'bioContent', value: nextBio }),
       }),
       fetch('/api/admin-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'siteText', value: nextSiteText })
+        body: JSON.stringify({ key: 'siteText', value: nextSiteText }),
       }),
       fetch('/api/admin-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'latestWorkPosts', value: postsToSave })
-      })
-    ]).then(() => setIsEditing(false))
-  }
-  }
+        body: JSON.stringify({ key: 'latestWorkPosts', value: nextLatestWorkPosts }),
+      }),
+    ]).then(() => setIsEditing(false));
+  };
 
   const handleCancel = () => {
-    setFormData({ ...content, siteText, latestWorkPosts })
-    setIsEditing(false)
-  }
+    setFormData({ ...content, siteText, latestWorkPosts });
+    setIsEditing(false);
+  };
 
   return (
     <div className="management-section">
@@ -166,7 +161,6 @@ function BioManagement() {
           </button>
         ) : null}
       </div>
-
       <div className="bio-container">
         {!isEditing ? (
           <div className="bio-display">
@@ -178,14 +172,12 @@ function BioManagement() {
                 <p>{content.aboutParagraph2}</p>
               </div>
             </div>
-
             <div className="content-section">
               <h3>Services Description</h3>
               <div className="content-preview">
                 <p>{content.servicesDescription}</p>
               </div>
             </div>
-
             <div className="content-section">
               <h3>Contact Section</h3>
               <div className="content-preview">
@@ -193,7 +185,6 @@ function BioManagement() {
                 <p><strong>Description:</strong> {content.contactDescription}</p>
               </div>
             </div>
-
             <div className="content-section">
               <h3>Front Site Text</h3>
               <div className="content-preview">
@@ -203,7 +194,6 @@ function BioManagement() {
                 <p><strong>Login:</strong> {siteText.login.title}</p>
               </div>
             </div>
-
             <div className="content-section">
               <h3>Latest Work Posts</h3>
               <div className="content-preview">
@@ -216,6 +206,7 @@ function BioManagement() {
         ) : (
           <div className="bio-edit">
             <form onSubmit={handleSubmit}>
+              {/* About Section */}
               <div className="form-card">
                 <h3>About Section</h3>
                 <div className="form-group">
@@ -246,7 +237,7 @@ function BioManagement() {
                   ></textarea>
                 </div>
               </div>
-
+              {/* Services Section */}
               <div className="form-card">
                 <h3>Services Section</h3>
                 <div className="form-group">
@@ -259,7 +250,7 @@ function BioManagement() {
                   ></textarea>
                 </div>
               </div>
-
+              {/* Contact Section */}
               <div className="form-card">
                 <h3>Contact Section</h3>
                 <div className="form-group">
@@ -281,184 +272,66 @@ function BioManagement() {
                   ></textarea>
                 </div>
               </div>
-
+              {/* Site Text Section */}
               <div className="form-card">
                 <h3>Front Site Text</h3>
-
-                <div className="form-group">
-                  <label>Navigation - Home</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.navigation?.home ?? defaultSiteText.navigation.home}
-                    onChange={(e) => handleSiteTextChange('navigation', 'home', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Navigation - Journey</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.navigation?.journey ?? defaultSiteText.navigation.journey}
-                    onChange={(e) => handleSiteTextChange('navigation', 'journey', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Navigation - Clients</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.navigation?.clients ?? defaultSiteText.navigation.clients}
-                    onChange={(e) => handleSiteTextChange('navigation', 'clients', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Navigation - My Work</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.navigation?.myWork ?? defaultSiteText.navigation.myWork}
-                    onChange={(e) => handleSiteTextChange('navigation', 'myWork', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Navigation - Creative Services</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.navigation?.creativeServices ?? defaultSiteText.navigation.creativeServices}
-                    onChange={(e) => handleSiteTextChange('navigation', 'creativeServices', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Navigation - Let's Connect</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.navigation?.letsConnect ?? defaultSiteText.navigation.letsConnect}
-                    onChange={(e) => handleSiteTextChange('navigation', 'letsConnect', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Navigation - Login</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.navigation?.login ?? defaultSiteText.navigation.login}
-                    onChange={(e) => handleSiteTextChange('navigation', 'login', e.target.value)}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Home - Latest Work Title</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.home?.latestWorkTitle ?? defaultSiteText.home.latestWorkTitle}
-                    onChange={(e) => handleSiteTextChange('home', 'latestWorkTitle', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Home - Latest Work Description</label>
-                  <textarea
-                    value={formData.siteText?.home?.latestWorkDescription ?? defaultSiteText.home.latestWorkDescription}
-                    onChange={(e) => handleSiteTextChange('home', 'latestWorkDescription', e.target.value)}
-                    rows="3"
-                  ></textarea>
-                </div>
-                <div className="form-group">
-                  <label>Home - My Work Title</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.home?.myWorkTitle ?? defaultSiteText.home.myWorkTitle}
-                    onChange={(e) => handleSiteTextChange('home', 'myWorkTitle', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Home - Search Placeholder</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.home?.searchPlaceholder ?? defaultSiteText.home.searchPlaceholder}
-                    onChange={(e) => handleSiteTextChange('home', 'searchPlaceholder', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Home - Contact Title Prefix</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.home?.contactTitlePrefix ?? defaultSiteText.home.contactTitlePrefix}
-                    onChange={(e) => handleSiteTextChange('home', 'contactTitlePrefix', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Home - Contact Title Emphasis</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.home?.contactTitleEmphasis ?? defaultSiteText.home.contactTitleEmphasis}
-                    onChange={(e) => handleSiteTextChange('home', 'contactTitleEmphasis', e.target.value)}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Clients Gallery - Title</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.clientsGallery?.title ?? defaultSiteText.clientsGallery.title}
-                    onChange={(e) => handleSiteTextChange('clientsGallery', 'title', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Clients Gallery - Description</label>
-                  <textarea
-                    value={formData.siteText?.clientsGallery?.description ?? defaultSiteText.clientsGallery.description}
-                    onChange={(e) => handleSiteTextChange('clientsGallery', 'description', e.target.value)}
-                    rows="2"
-                  ></textarea>
-                </div>
-
-                <div className="form-group">
-                  <label>Footer - Copyright Prefix</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.footer?.copyrightPrefix ?? defaultSiteText.footer.copyrightPrefix}
-                    onChange={(e) => handleSiteTextChange('footer', 'copyrightPrefix', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Footer - All Rights Reserved Suffix</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.footer?.allRightsReservedSuffix ?? defaultSiteText.footer.allRightsReservedSuffix}
-                    onChange={(e) => handleSiteTextChange('footer', 'allRightsReservedSuffix', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Footer - Powered By Prefix</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.footer?.poweredByPrefix ?? defaultSiteText.footer.poweredByPrefix}
-                    onChange={(e) => handleSiteTextChange('footer', 'poweredByPrefix', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Footer - Powered By Name</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.footer?.poweredByName ?? defaultSiteText.footer.poweredByName}
-                    onChange={(e) => handleSiteTextChange('footer', 'poweredByName', e.target.value)}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Login - Title</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.login?.title ?? defaultSiteText.login.title}
-                    onChange={(e) => handleSiteTextChange('login', 'title', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Login - Subtitle</label>
-                  <input
-                    type="text"
-                    value={formData.siteText?.login?.subtitle ?? defaultSiteText.login.subtitle}
-                    onChange={(e) => handleSiteTextChange('login', 'subtitle', e.target.value)}
-                  />
-                </div>
+                {/* Navigation fields */}
+                {Object.keys(defaultSiteText.navigation).map((navKey) => (
+                  <div className="form-group" key={navKey}>
+                    <label>Navigation - {navKey.charAt(0).toUpperCase() + navKey.slice(1)}</label>
+                    <input
+                      type="text"
+                      value={formData.siteText?.navigation?.[navKey] ?? defaultSiteText.navigation[navKey]}
+                      onChange={(e) => handleSiteTextChange('navigation', navKey, e.target.value)}
+                    />
+                  </div>
+                ))}
+                {/* Home fields */}
+                {Object.keys(defaultSiteText.home).map((homeKey) => (
+                  <div className="form-group" key={homeKey}>
+                    <label>Home - {homeKey.charAt(0).toUpperCase() + homeKey.slice(1)}</label>
+                    <input
+                      type="text"
+                      value={formData.siteText?.home?.[homeKey] ?? defaultSiteText.home[homeKey]}
+                      onChange={(e) => handleSiteTextChange('home', homeKey, e.target.value)}
+                    />
+                  </div>
+                ))}
+                {/* Clients Gallery fields */}
+                {Object.keys(defaultSiteText.clientsGallery).map((cgKey) => (
+                  <div className="form-group" key={cgKey}>
+                    <label>Clients Gallery - {cgKey.charAt(0).toUpperCase() + cgKey.slice(1)}</label>
+                    <input
+                      type="text"
+                      value={formData.siteText?.clientsGallery?.[cgKey] ?? defaultSiteText.clientsGallery[cgKey]}
+                      onChange={(e) => handleSiteTextChange('clientsGallery', cgKey, e.target.value)}
+                    />
+                  </div>
+                ))}
+                {/* Footer fields */}
+                {Object.keys(defaultSiteText.footer).map((footerKey) => (
+                  <div className="form-group" key={footerKey}>
+                    <label>Footer - {footerKey.charAt(0).toUpperCase() + footerKey.slice(1)}</label>
+                    <input
+                      type="text"
+                      value={formData.siteText?.footer?.[footerKey] ?? defaultSiteText.footer[footerKey]}
+                      onChange={(e) => handleSiteTextChange('footer', footerKey, e.target.value)}
+                    />
+                  </div>
+                ))}
+                {/* Login fields */}
+                {Object.keys(defaultSiteText.login).map((loginKey) => (
+                  <div className="form-group" key={loginKey}>
+                    <label>Login - {loginKey.charAt(0).toUpperCase() + loginKey.slice(1)}</label>
+                    <input
+                      type="text"
+                      value={formData.siteText?.login?.[loginKey] ?? defaultSiteText.login[loginKey]}
+                      onChange={(e) => handleSiteTextChange('login', loginKey, e.target.value)}
+                    />
+                  </div>
+                ))}
               </div>
-
+              {/* Latest Work Posts Section */}
               <div className="form-card">
                 <h3>Latest Work Posts</h3>
                 <div className="form-actions" style={{ justifyContent: 'flex-start' }}>
@@ -467,7 +340,6 @@ function BioManagement() {
                     Add Post
                   </button>
                 </div>
-
                 {(formData.latestWorkPosts || []).map((post) => (
                   <div key={post.id} className="data-card" style={{ padding: '1.5rem', marginTop: '1.5rem' }}>
                     <div className="section-header" style={{ marginBottom: '1rem' }}>
@@ -480,7 +352,6 @@ function BioManagement() {
                         🗑️ Delete
                       </button>
                     </div>
-
                     <div className="form-group">
                       <label>Title</label>
                       <input
@@ -489,7 +360,6 @@ function BioManagement() {
                         onChange={(e) => handleLatestWorkPostChange(post.id, 'title', e.target.value)}
                       />
                     </div>
-
                     <div className="form-group">
                       <label>Excerpt</label>
                       <textarea
@@ -498,7 +368,6 @@ function BioManagement() {
                         rows="3"
                       ></textarea>
                     </div>
-
                     <div className="form-group">
                       <label>Image URL</label>
                       <input
@@ -527,7 +396,6 @@ function BioManagement() {
                   </div>
                 ))}
               </div>
-
               <div className="form-actions">
                 <button type="button" className="btn-secondary" onClick={handleCancel}>
                   Cancel
@@ -541,7 +409,7 @@ function BioManagement() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
-export default BioManagement
+export default BioManagement;

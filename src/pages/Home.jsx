@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import './Home.css'
-import ClientsGalleryNew from '../components/ClientsGalleryNew'
+import { ClientsGallery } from '../components/ClientsGallery'
 import { loadSiteText } from '@/content/siteText'
 import { loadLatestWorkPosts } from '@/content/latestWork'
-import { Filter, Instagram, Linkedin, Mail, Phone } from 'lucide-react'
+import { Filter } from 'lucide-react'
 
 function Home() {
   const [personalData, setPersonalData] = useState(null)
@@ -57,7 +57,7 @@ function Home() {
   const servicesDescription = bioContent?.servicesDescription ||
     'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat.'
   const contactSubtitle = bioContent?.contactSubtitle || 'Ready to bring your culinary vision to life?'
-  const contactDescription = bioContent?.contactDescription || ""
+  const contactDescription = bioContent?.contactDescription || "Let's discuss your next foodstyling project & create something truly mouth-watering."
 
   const renderMultilineTitle = (text) =>
     String(text)
@@ -223,6 +223,11 @@ function Home() {
                   </div>
                   <h3 className="work-card-name">{client.name}</h3>
                   <p className="work-card-description">{client.description}</p>
+                  <div className="work-card-categories">
+                    {client.categories.map((cat, idx) => (
+                      <span key={idx} className="category-badge">{cat}</span>
+                    ))}
+                  </div>
                 </div>
               ))
             ) : (
@@ -233,7 +238,7 @@ function Home() {
       </section>
 
       {/* Clients Gallery Section */}
-      <ClientsGalleryNew />
+      <ClientsGallery />
 
       {/* Creative Services Section */}
       <section className="services-section">
@@ -274,7 +279,7 @@ function Home() {
             <span className="connect-text">{siteText.home.contactTitleEmphasis}</span>
           </h2>
           <p className="contact-subtitle">{contactSubtitle}</p>
-          {contactDescription && <p className="contact-description">{contactDescription}</p>}
+          <p className="contact-description">{contactDescription}</p>
 
           <form className="contact-form">
             <div className="form-row">
@@ -303,27 +308,19 @@ function Home() {
 
           <div className="footer-contact">
             <div className="footer-social">
-              <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="social-icon" aria-label="Instagram">
-                <div className="icon-circle">
-                  <Instagram size={24} />
-                </div>
+              <a href="#" className="social-icon">
+                <div className="icon-circle"></div>
               </a>
-              <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="social-icon" aria-label="LinkedIn">
-                <div className="icon-circle">
-                  <Linkedin size={24} />
-                </div>
+              <a href="#" className="social-icon">
+                <div className="icon-circle"></div>
               </a>
             </div>
             <a href={`mailto:${email}`} className="footer-email">
-              <div className="icon-circle">
-                <Mail size={24} />
-              </div>
+              <div className="icon-circle"></div>
               <span>{email}</span>
             </a>
             <div className="footer-phone">
-              <div className="icon-circle">
-                <Phone size={24} />
-              </div>
+              <div className="icon-circle"></div>
               <span>{phone}</span>
             </div>
           </div>
