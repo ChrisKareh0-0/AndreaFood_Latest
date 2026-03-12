@@ -1,7 +1,7 @@
 // Database connection setup for Railway PostgreSQL
 const { Pool } = require('pg');
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:czYEgYhOAPqxVfDAIzxdWkgXGFnIDIde@postgres-production-5cf8.up.railway.app:5432/railway';
+const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:czYEgYhOAPqxVfDAIzxdWkgXGFnIDIde@ballast.proxy.rlwy.net:46364/railway';
 
 // Railway internal network doesn't need SSL; public connections do
 const isRailway = !!process.env.RAILWAY_ENVIRONMENT || !!process.env.DATABASE_URL;
