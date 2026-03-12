@@ -1,14 +1,31 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './Management.css'
 import { useToast } from '../../hooks/useToast'
 import { ToastContainer } from '../../components/Toast'
 
 function PictureManagement() {
   const { toasts, showToast, removeToast } = useToast()
-  const [pictures, setPictures] = useState([
-    { id: 1, title: 'Food Photography 1', category: 'TVC', url: '', description: 'Sample description' },
-    { id: 2, title: 'Food Photography 2', category: 'Photoshoot', url: '', description: 'Sample description' }
-  ])
+  const [pictures, setPictures] = useState([])
+  const [loading, setLoading] = useState(true)
+  // Fetch pictures from backend on mount
+  useEffect(() => {
+    const fetchPictures = async () => {
+      try {
+        const res = await fetch('/api/admin-data/pictures')
+        if (res.ok) {
+          const data = await res.json()
+          setPictures(Array.isArray(data.value) ? data.value : [])
+        } else {
+          setPictures([])
+        }
+      } catch (err) {
+        showToast('Failed to load pictures', 'error')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchPictures()
+  }, [])
 
   const [showModal, setShowModal] = useState(false)
   const [editingPicture, setEditingPicture] = useState(null)
@@ -31,23 +48,50 @@ function PictureManagement() {
     setShowModal(true)
   }
 
-  const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this picture?')) {
-      setPictures(pictures.filter(p => p.id !== id))
-      showToast('Picture deleted successfully', 'success')
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this picture?')) return
+    try {
+      const newPictures = pictures.filter(p => p.id !== id)
+      const res = await fetch('/api/admin-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'pictures', value: newPictures })
+      })
+      if (res.ok) {
+        setPictures(newPictures)
+        showToast('Picture deleted successfully', 'success')
+      } else {
+        showToast('Failed to delete picture', 'error')
+      }
+    } catch (err) {
+      showToast('Failed to delete picture', 'error')
     }
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    let newPictures
     if (editingPicture) {
-      setPictures(pictures.map(p => p.id === editingPicture.id ? { ...formData, id: p.id } : p))
-      showToast('Picture updated successfully!', 'success')
+      newPictures = pictures.map(p => p.id === editingPicture.id ? { ...formData, id: p.id } : p)
     } else {
-      setPictures([...pictures, { ...formData, id: Date.now() }])
-      showToast('Picture added successfully!', 'success')
+      newPictures = [...pictures, { ...formData, id: Date.now() }]
     }
-    setShowModal(false)
+    try {
+      const res = await fetch('/api/admin-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'pictures', value: newPictures })
+      })
+      if (res.ok) {
+        setPictures(newPictures)
+        showToast(editingPicture ? 'Picture updated successfully!' : 'Picture added successfully!', 'success')
+        setShowModal(false)
+      } else {
+        showToast('Failed to save picture', 'error')
+      }
+    } catch (err) {
+      showToast('Failed to save picture', 'error')
+    }
   }
 
   return (
@@ -62,30 +106,36 @@ function PictureManagement() {
       </div>
 
       <div className="content-grid">
-        {pictures.map((picture) => (
-          <div key={picture.id} className="content-card picture-card">
-            <div className="card-image">
-              {picture.url ? (
-                <img src={picture.url} alt={picture.title} />
-              ) : (
-                <div className="placeholder">📷</div>
-              )}
-            </div>
-            <div className="card-content">
-              <h3>{picture.title}</h3>
-              <span className="badge">{picture.category}</span>
-              <p>{picture.description}</p>
-              <div className="card-actions">
-                <button className="btn-edit" onClick={() => handleEdit(picture)}>
-                  ✏️ Edit
-                </button>
-                <button className="btn-delete" onClick={() => handleDelete(picture.id)}>
-                  🗑️ Delete
-                </button>
+        {loading ? (
+          <div>Loading pictures...</div>
+        ) : pictures.length === 0 ? (
+          <div>No pictures found.</div>
+        ) : (
+          pictures.map((picture) => (
+            <div key={picture.id} className="content-card picture-card">
+              <div className="card-image">
+                {picture.url ? (
+                  <img src={picture.url} alt={picture.title} />
+                ) : (
+                  <div className="placeholder">📷</div>
+                )}
+              </div>
+              <div className="card-content">
+                <h3>{picture.title}</h3>
+                <span className="badge">{picture.category}</span>
+                <p>{picture.description}</p>
+                <div className="card-actions">
+                  <button className="btn-edit" onClick={() => handleEdit(picture)}>
+                    ✏️ Edit
+                  </button>
+                  <button className="btn-delete" onClick={() => handleDelete(picture.id)}>
+                    🗑️ Delete
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {showModal && (

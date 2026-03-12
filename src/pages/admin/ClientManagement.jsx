@@ -1,15 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './Management.css'
 import { useToast } from '../../hooks/useToast'
 import { ToastContainer } from '../../components/Toast'
 
 function ClientManagement() {
   const { toasts, showToast, removeToast } = useToast()
-  const [clients, setClients] = useState([
-    { id: 1, name: 'Client 1', logo: '', categories: ['TVC', 'Photoshoot'], description: 'Sample client' },
-    { id: 2, name: 'Client 2', logo: '', categories: ['TVC'], description: 'Sample client' },
-    { id: 3, name: 'Client 3', logo: '', categories: ['Photoshoot'], description: 'Sample client' }
-  ])
+  const [clients, setClients] = useState([])
+  const [loading, setLoading] = useState(true)
+  // Fetch clients from backend on mount
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const res = await fetch('/api/clients')
+        const data = await res.json()
+        setClients(data.clients || [])
+      } catch (err) {
+        showToast('Failed to load clients', 'error')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchClients()
+  }, [])
 
   const [categories] = useState(['TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media'])
   const [showModal, setShowModal] = useState(false)
@@ -33,10 +45,19 @@ function ClientManagement() {
     setShowModal(true)
   }
 
-  const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this client?')) {
-      setClients(clients.filter(c => c.id !== id))
-      showToast('Client deleted successfully', 'success')
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this client?')) return
+    try {
+      const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        setClients(clients.filter(c => c.id !== id))
+        showToast('Client deleted successfully', 'success')
+      } else {
+        showToast('Failed to delete client', 'error')
+      }
+    } catch (err) {
+      showToast('Failed to delete client', 'error')
     }
   }
 
@@ -47,14 +68,46 @@ function ClientManagement() {
     setFormData({ ...formData, categories: newCategories })
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (editingClient) {
-      setClients(clients.map(c => c.id === editingClient.id ? { ...formData, id: c.id } : c))
-      showToast('Client updated successfully!', 'success')
+      // For now, treat as delete+add (no PATCH endpoint)
+      try {
+        // Delete old client
+        await fetch(`/api/clients/${editingClient.id}`, { method: 'DELETE' })
+        // Add new client
+        const res = await fetch('/api/clients/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        })
+        const data = await res.json()
+        if (data.success) {
+          setClients(clients.map(c => c.id === editingClient.id ? data.client : c))
+          showToast('Client updated successfully!', 'success')
+        } else {
+          showToast('Failed to update client', 'error')
+        }
+      } catch (err) {
+        showToast('Failed to update client', 'error')
+      }
     } else {
-      setClients([...clients, { ...formData, id: Date.now() }])
-      showToast('Client added successfully!', 'success')
+      try {
+        const res = await fetch('/api/clients/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        })
+        const data = await res.json()
+        if (data.success) {
+          setClients([...clients, data.client])
+          showToast('Client added successfully!', 'success')
+        } else {
+          showToast('Failed to add client', 'error')
+        }
+      } catch (err) {
+        showToast('Failed to add client', 'error')
+      }
     }
     setShowModal(false)
   }
@@ -71,34 +124,40 @@ function ClientManagement() {
       </div>
 
       <div className="clients-list">
-        {clients.map((client) => (
-          <div key={client.id} className="client-item">
-            <div className="client-logo">
-              {client.logo ? (
-                <img src={client.logo} alt={client.name} />
-              ) : (
-                <div className="placeholder">👤</div>
-              )}
-            </div>
-            <div className="client-info">
-              <h3>{client.name}</h3>
-              <div className="client-categories">
-                {client.categories.map((cat, idx) => (
-                  <span key={idx} className="badge">{cat}</span>
-                ))}
+        {loading ? (
+          <div>Loading clients...</div>
+        ) : clients.length === 0 ? (
+          <div>No clients found.</div>
+        ) : (
+          clients.map((client) => (
+            <div key={client.id} className="client-item">
+              <div className="client-logo">
+                {client.logo ? (
+                  <img src={client.logo} alt={client.name} />
+                ) : (
+                  <div className="placeholder">👤</div>
+                )}
               </div>
-              <p>{client.description}</p>
+              <div className="client-info">
+                <h3>{client.name}</h3>
+                <div className="client-categories">
+                  {client.categories.map((cat, idx) => (
+                    <span key={idx} className="badge">{cat}</span>
+                  ))}
+                </div>
+                <p>{client.description}</p>
+              </div>
+              <div className="client-actions">
+                <button className="btn-edit" onClick={() => handleEdit(client)}>
+                  ✏️ Edit
+                </button>
+                <button className="btn-delete" onClick={() => handleDelete(client.id)}>
+                  🗑️ Delete
+                </button>
+              </div>
             </div>
-            <div className="client-actions">
-              <button className="btn-edit" onClick={() => handleEdit(client)}>
-                ✏️ Edit
-              </button>
-              <button className="btn-delete" onClick={() => handleDelete(client.id)}>
-                🗑️ Delete
-              </button>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {showModal && (

@@ -1,23 +1,37 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './Management.css'
 
 function PersonalDataManagement() {
-  const [personalData, setPersonalData] = useState(() => {
-    const saved = localStorage.getItem('personalData')
-    return saved ? JSON.parse(saved) : {
-      fullName: 'Andrea Abi Khalil',
-      title: 'Food Stylist',
-      email: 'andreaabikhalil@gmail.com',
-      phone: '03 56 16 58',
-      instagram: '@andreafoodstyle',
-      facebook: 'Andrea Food Style',
-      heroImage: '',
-      profileImage: ''
-    }
+  const [personalData, setPersonalData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [isEditing, setIsEditing] = useState(false)
+  const [formData, setFormData] = useState({
+    fullName: '',
+    title: '',
+    email: '',
+    phone: '',
+    instagram: '',
+    facebook: '',
+    heroImage: '',
+    profileImage: ''
   })
 
-  const [isEditing, setIsEditing] = useState(false)
-  const [formData, setFormData] = useState(personalData)
+  useEffect(() => {
+    const fetchPersonalData = async () => {
+      try {
+        const res = await fetch('/api/admin-data/personalData')
+        if (res.ok) {
+          const data = await res.json()
+          setPersonalData(data.value)
+          setFormData(data.value)
+        }
+      } catch (err) {
+        console.error('Failed to fetch personal data', err)
+      }
+      setLoading(false)
+    }
+    fetchPersonalData()
+  }, [])
 
   const handleFileUpload = (e, field) => {
     const file = e.target.files[0]
@@ -30,16 +44,30 @@ function PersonalDataManagement() {
     }
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    setPersonalData(formData)
-    localStorage.setItem('personalData', JSON.stringify(formData))
-    setIsEditing(false)
+    try {
+      const res = await fetch('/api/admin-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'personalData', value: formData })
+      })
+      if (res.ok) {
+        setPersonalData(formData)
+        setIsEditing(false)
+      }
+    } catch (err) {
+      console.error('Failed to save personal data', err)
+    }
   }
 
   const handleCancel = () => {
     setFormData(personalData)
     setIsEditing(false)
+  }
+
+  if (loading) {
+    return <div className="management-section"><div>Loading personal data...</div></div>
   }
 
   return (
@@ -61,11 +89,11 @@ function PersonalDataManagement() {
               <h3>Basic Information</h3>
               <div className="data-item">
                 <span className="data-label">Full Name:</span>
-                <span className="data-value">{personalData.fullName}</span>
+                <span className="data-value">{personalData?.fullName}</span>
               </div>
               <div className="data-item">
                 <span className="data-label">Title:</span>
-                <span className="data-value">{personalData.title}</span>
+                <span className="data-value">{personalData?.title}</span>
               </div>
             </div>
 
@@ -73,11 +101,11 @@ function PersonalDataManagement() {
               <h3>Contact Information</h3>
               <div className="data-item">
                 <span className="data-label">Email:</span>
-                <span className="data-value">{personalData.email}</span>
+                <span className="data-value">{personalData?.email}</span>
               </div>
               <div className="data-item">
                 <span className="data-label">Phone:</span>
-                <span className="data-value">{personalData.phone}</span>
+                <span className="data-value">{personalData?.phone}</span>
               </div>
             </div>
 
@@ -85,11 +113,11 @@ function PersonalDataManagement() {
               <h3>Social Media</h3>
               <div className="data-item">
                 <span className="data-label">Instagram:</span>
-                <span className="data-value">{personalData.instagram}</span>
+                <span className="data-value">{personalData?.instagram}</span>
               </div>
               <div className="data-item">
                 <span className="data-label">Facebook:</span>
-                <span className="data-value">{personalData.facebook}</span>
+                <span className="data-value">{personalData?.facebook}</span>
               </div>
             </div>
 
@@ -98,7 +126,7 @@ function PersonalDataManagement() {
               <div className="data-item">
                 <span className="data-label">Hero Image:</span>
                 <div className="data-value">
-                  {personalData.heroImage ? (
+                  {personalData?.heroImage ? (
                     <div className="image-preview image-preview--compact">
                       <img src={personalData.heroImage} alt="Hero preview" />
                     </div>
@@ -110,7 +138,7 @@ function PersonalDataManagement() {
               <div className="data-item">
                 <span className="data-label">Profile Image:</span>
                 <div className="data-value">
-                  {personalData.profileImage ? (
+                  {personalData?.profileImage ? (
                     <div className="image-preview image-preview--compact">
                       <img src={personalData.profileImage} alt="Profile preview" />
                     </div>
