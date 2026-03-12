@@ -23,12 +23,15 @@ async function dbQuery(text, params) {
 // Test DB connection on startup; fall back to in-memory if unreachable
 (async () => {
   try {
+    console.log('🔌 Connecting to database...');
+    console.log('   DATABASE_URL set:', !!process.env.DATABASE_URL);
+    console.log('   RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT || 'not set');
     await pool.query('SELECT 1');
-    console.log('✅ Database connected');
+    console.log('✅ Database connected successfully');
   } catch (err) {
     useLocalFallback = true;
-    console.log('⚠️  Database unreachable — using in-memory fallback for local testing');
-    console.log('   (Data will not persist across restarts)');
+    console.log('⚠️  Database unreachable — using in-memory fallback');
+    console.log('   Error:', err.message);
   }
 })();
 
@@ -56,19 +59,25 @@ app.post('/api/admin-data', async (req, res) => {
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
+  const diagnostics = {
+    DATABASE_URL_set: !!process.env.DATABASE_URL,
+    RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT || 'not set',
+    usingFallback: useLocalFallback,
+  };
   if (useLocalFallback) {
     return res.json({
       status: 'ok',
       database: 'unreachable (using local fallback)',
       storedKeys: Object.keys(localStore),
+      diagnostics,
       timestamp: new Date().toISOString()
     });
   }
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
+    res.json({ status: 'ok', database: 'connected', diagnostics, timestamp: new Date().toISOString() });
   } catch (err) {
-    res.json({ status: 'error', database: 'unreachable', error: err.message, timestamp: new Date().toISOString() });
+    res.json({ status: 'error', database: 'unreachable', error: err.message, diagnostics, timestamp: new Date().toISOString() });
   }
 });
 
