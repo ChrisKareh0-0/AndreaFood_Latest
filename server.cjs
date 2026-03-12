@@ -118,6 +118,101 @@ app.get('/api/admin-data/:key', async (req, res) => {
   }
 });
 
+// --- Clients API endpoints ---
+// Get all clients
+app.get('/api/clients', async (req, res) => {
+  try {
+    if (useLocalFallback) {
+      const raw = localStore['clients'];
+      return res.json({ clients: raw ? JSON.parse(raw) : [], source: 'local-fallback' });
+    }
+    const result = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
+    if (result.rows.length === 0) return res.json({ clients: [], source: 'database' });
+    res.json({ clients: JSON.parse(result.rows[0].value), source: 'database' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save all clients (replace entire list)
+app.post('/api/clients', async (req, res) => {
+  const { clients } = req.body;
+  if (!Array.isArray(clients)) return res.status(400).json({ error: 'clients must be an array' });
+  try {
+    const value = JSON.stringify(clients);
+    if (useLocalFallback) {
+      localStore['clients'] = value;
+      return res.json({ success: true, count: clients.length, source: 'local-fallback' });
+    }
+    await pool.query(
+      "INSERT INTO admin_data(key, value) VALUES('clients', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+      [value]
+    );
+    res.json({ success: true, count: clients.length, source: 'database' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add a single client
+app.post('/api/clients/add', async (req, res) => {
+  const client = req.body;
+  if (!client.name) return res.status(400).json({ error: 'Client name is required' });
+  try {
+    let clients = [];
+    if (useLocalFallback) {
+      const raw = localStore['clients'];
+      if (raw) clients = JSON.parse(raw);
+    } else {
+      const result = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
+      if (result.rows.length > 0) clients = JSON.parse(result.rows[0].value);
+    }
+    const newClient = { id: Date.now(), ...client };
+    clients.push(newClient);
+    const value = JSON.stringify(clients);
+    if (useLocalFallback) {
+      localStore['clients'] = value;
+    } else {
+      await pool.query(
+        "INSERT INTO admin_data(key, value) VALUES('clients', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+        [value]
+      );
+    }
+    res.json({ success: true, client: newClient, totalClients: clients.length, source: useLocalFallback ? 'local-fallback' : 'database' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a client by id
+app.delete('/api/clients/:id', async (req, res) => {
+  const clientId = parseInt(req.params.id);
+  try {
+    let clients = [];
+    if (useLocalFallback) {
+      const raw = localStore['clients'];
+      if (raw) clients = JSON.parse(raw);
+    } else {
+      const result = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
+      if (result.rows.length > 0) clients = JSON.parse(result.rows[0].value);
+    }
+    const before = clients.length;
+    clients = clients.filter(c => c.id !== clientId);
+    const value = JSON.stringify(clients);
+    if (useLocalFallback) {
+      localStore['clients'] = value;
+    } else {
+      await pool.query(
+        "INSERT INTO admin_data(key, value) VALUES('clients', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+        [value]
+      );
+    }
+    res.json({ success: true, deleted: before - clients.length, remaining: clients.length, source: useLocalFallback ? 'local-fallback' : 'database' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Fallback for React Router
 app.use((req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
