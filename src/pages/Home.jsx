@@ -16,37 +16,28 @@ function Home() {
 
   const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
 
-  // Sample clients data with categories
-  const [clients] = useState([
-    { id: 1, name: 'Mövenpick Hotels', logo: '', categories: ['TVC', 'Photoshoot'], description: 'Luxury dessert styling campaign' },
-    { id: 2, name: 'Nestlé Middle East', logo: '', categories: ['TVC', 'Commercial'], description: 'Fresh ingredients photoshoot' },
-    { id: 3, name: 'Le Pain Quotidien', logo: '', categories: ['Photoshoot'], description: 'Artisan bakery collection' },
-    { id: 4, name: 'Starbucks Lebanon', logo: '', categories: ['Commercial', 'TVC'], description: 'Coffee & pastries menu' },
-    { id: 5, name: 'Carrefour', logo: '', categories: ['Editorial', 'Photoshoot'], description: 'Gourmet dining campaign' },
-    { id: 6, name: 'Spinneys', logo: '', categories: ['Photoshoot'], description: 'Organic produce showcase' },
-    { id: 7, name: 'Zaatar W Zeit', logo: '', categories: ['TVC', 'Commercial'], description: 'Lebanese cuisine styling' },
-    { id: 8, name: 'Patchi Chocolatier', logo: '', categories: ['Editorial'], description: 'Premium chocolate styling' }
-  ])
+  // Use latestWorkPosts from admin panel for My Work section
+  const clients = Array.isArray(latestWorkPosts) ? latestWorkPosts : [];
 
   const filteredClients = clients.filter(client => {
-    const matchesCategory = activeFilter === 'All' || client.categories.includes(activeFilter)
-    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesCategory && matchesSearch
-  })
+    const matchesCategory = activeFilter === 'All' || (client.categories && client.categories.includes(activeFilter));
+    const matchesSearch = (client.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   useEffect(() => {
     const saved = localStorage.getItem('personalData')
     if (saved) {
-      setPersonalData(JSON.parse(saved))
+      setTimeout(() => setPersonalData(JSON.parse(saved)), 0)
     }
 
     const savedBio = localStorage.getItem('bioContent')
     if (savedBio) {
-      setBioContent(JSON.parse(savedBio))
+      setTimeout(() => setBioContent(JSON.parse(savedBio)), 0)
     }
 
-    setSiteText(loadSiteText())
-    setLatestWorkPosts(loadLatestWorkPosts())
+    setTimeout(() => setSiteText(loadSiteText()), 0)
+    setTimeout(() => setLatestWorkPosts(loadLatestWorkPosts()), 0)
   }, [])
 
   const aboutTitle = bioContent?.aboutTitle || 'A Glimpse into the Journey..'
@@ -216,17 +207,21 @@ function Home() {
                 <div key={client.id} className="work-card-item">
                   <div className="work-card-logo">
                     {client.logo ? (
-                      <img src={client.logo} alt={client.name} className="client-logo-img" />
+                      <img src={client.logo} alt={client.name || 'Client'} className="client-logo-img" />
                     ) : (
-                      <div className="logo-circle">{client.name.charAt(0)}</div>
+                      <div className="logo-circle">{typeof client.name === 'string' && client.name.length > 0 ? client.name.charAt(0) : '?'}</div>
                     )}
                   </div>
                   <h3 className="work-card-name">{client.name}</h3>
                   <p className="work-card-description">{client.description}</p>
                   <div className="work-card-categories">
-                    {client.categories.map((cat, idx) => (
-                      <span key={idx} className="category-badge">{cat}</span>
-                    ))}
+                    {Array.isArray(client.categories) && client.categories.length > 0 ? (
+                      client.categories.map((cat, idx) => (
+                        <span key={idx} className="category-badge">{cat}</span>
+                      ))
+                    ) : (
+                      <span className="category-badge">No categories</span>
+                    )}
                   </div>
                 </div>
               ))

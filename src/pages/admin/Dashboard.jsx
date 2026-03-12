@@ -5,6 +5,7 @@ import PersonalDataManagement from './PersonalDataManagement'
 import BioManagement from './BioManagement'
 import ClientManagement from './ClientManagement'
 import CategoryManagement from './CategoryManagement'
+import APITest from './APITest.jsx'
 import './Dashboard.css'
 
 function Dashboard() {
@@ -29,7 +30,8 @@ function Dashboard() {
     { id: 'personal-data', label: 'Personal Data', icon: '👤' },
     { id: 'bio', label: 'Bio & Content', icon: '📝' },
     { id: 'clients', label: 'Clients', icon: '🤝' },
-    { id: 'categories', label: 'Categories', icon: '🏷️' }
+    { id: 'categories', label: 'Categories', icon: '🏷️' },
+    { id: 'api-test', label: 'API Test', icon: '🧪' }
   ]
 
   return (
@@ -139,6 +141,7 @@ function Dashboard() {
           {activeSection === 'bio' && <BioManagement />}
           {activeSection === 'clients' && <ClientManagement />}
           {activeSection === 'categories' && <CategoryManagement />}
+          {activeSection === 'api-test' && <APITest />}
         </div>
       </main>
     </div>

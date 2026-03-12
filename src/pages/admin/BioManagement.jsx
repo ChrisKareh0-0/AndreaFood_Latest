@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { defaultSiteText } from '@/content/siteText';
-import { defaultLatestWorkPosts } from '@/content/latestWork';
 import './Management.css';
 
 function BioManagement() {
@@ -27,7 +26,7 @@ function BioManagement() {
           siteText: siteTextData?.value || {},
           latestWorkPosts: latestWorkData?.value || [],
         });
-      } catch (err) {
+      } catch {
         // show error or keep empty
       }
     }
@@ -154,39 +153,39 @@ function BioManagement() {
             <div className="content-section">
               <h3>About Section</h3>
               <div className="content-preview">
-                <h4>{content?.aboutTitle}</h4>
-                <p>{content?.aboutParagraph1}</p>
-                <p>{content?.aboutParagraph2}</p>
+                <h4>{content?.aboutTitle || 'No title available'}</h4>
+                <p>{content?.aboutParagraph1 || 'No first paragraph available.'}</p>
+                <p>{content?.aboutParagraph2 || 'No second paragraph available.'}</p>
               </div>
             </div>
             <div className="content-section">
               <h3>Services Description</h3>
               <div className="content-preview">
-                <p>{content?.servicesDescription}</p>
+                <p>{content?.servicesDescription || 'No services description available.'}</p>
               </div>
             </div>
             <div className="content-section">
               <h3>Contact Section</h3>
               <div className="content-preview">
-                <p><strong>Subtitle:</strong> {content?.contactSubtitle}</p>
-                <p><strong>Description:</strong> {content?.contactDescription}</p>
+                <p><strong>Subtitle:</strong> {content?.contactSubtitle || 'No contact subtitle.'}</p>
+                <p><strong>Description:</strong> {content?.contactDescription || 'No contact description.'}</p>
               </div>
             </div>
             <div className="content-section">
               <h3>Front Site Text</h3>
               <div className="content-preview">
-                <p><strong>Navigation:</strong> {siteText?.navigation?.home} / {siteText?.navigation?.journey} / {siteText?.navigation?.clients} / {siteText?.navigation?.myWork} / {siteText?.navigation?.creativeServices} / {siteText?.navigation?.letsConnect}</p>
-                <p><strong>Clients Gallery:</strong> {siteText?.clientsGallery?.title}</p>
-                <p><strong>Footer:</strong> {siteText?.footer?.copyrightPrefix} … {siteText?.footer?.allRightsReservedSuffix}</p>
-                <p><strong>Login:</strong> {siteText?.login?.title}</p>
+                <p><strong>Navigation:</strong> {siteText?.navigation?.home || 'Home'} / {siteText?.navigation?.journey || 'Journey'} / {siteText?.navigation?.clients || 'Clients'} / {siteText?.navigation?.myWork || 'My Work'} / {siteText?.navigation?.creativeServices || 'Creative Services'} / {siteText?.navigation?.letsConnect || 'Lets Connect'}</p>
+                <p><strong>Clients Gallery:</strong> {siteText?.clientsGallery?.title || 'No gallery title.'}</p>
+                <p><strong>Footer:</strong> {siteText?.footer?.copyrightPrefix || ''} … {siteText?.footer?.allRightsReservedSuffix || ''}</p>
+                <p><strong>Login:</strong> {siteText?.login?.title || 'Login'}</p>
               </div>
             </div>
             <div className="content-section">
               <h3>Latest Work Posts</h3>
               <div className="content-preview">
-                {(latestWorkPosts || []).map((p) => (
+                {(latestWorkPosts && latestWorkPosts.length > 0) ? latestWorkPosts.map((p) => (
                   <p key={p.id}><strong>{p.title || 'Untitled'}:</strong> {p.excerpt || 'No excerpt yet.'}</p>
-                ))}
+                )) : <p>No work posts available.</p>}
               </div>
             </div>
           </div>

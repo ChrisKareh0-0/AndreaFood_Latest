@@ -11,11 +11,24 @@ function MyWork() {
 
   const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
 
-  // Accept clients as a prop or fetch from backend/admin panel
+  // Use latestWorkPosts from admin panel
+  const clients = Array.isArray(window.latestWorkPosts) ? window.latestWorkPosts : [];
+
+  // Fallback for missing data
+  if (!clients || clients.length === 0) {
+    return (
+      <div className="my-work-page">
+        <div className="my-work-header">
+          <h1 className="my-work-title">{renderWithCircleAccentOnFirstO(siteText.myWork.title)}</h1>
+        </div>
+        <div className="no-results">No work posts available. Add them in the admin panel.</div>
+      </div>
+    );
+  }
 
   const filteredClients = clients.filter(client => {
-    const matchesCategory = activeFilter === 'All' || client.categories.includes(activeFilter)
-    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = activeFilter === 'All' || (client.categories && client.categories.includes(activeFilter))
+    const matchesSearch = (client.name || '').toLowerCase().includes(searchTerm.toLowerCase())
     return matchesCategory && matchesSearch
   })
 
@@ -77,7 +90,9 @@ function MyWork() {
       </div>
 
       <div className="clients-carousel">
-        <button className="carousel-btn prev">&lt;</button>
+        {filteredClients.length > 0 ? (
+          <button className="carousel-btn prev">&lt;</button>
+        ) : <div>No clients to display.</div>}
         <div className="clients-carousel-content">
           {filteredClients.length > 0 ? (
             filteredClients.map((client) => (

@@ -2,17 +2,16 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 
-// Accept clientsData as a prop or fetch from backend/admin panel
-
 const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial']
 
-function ClientsGalleryNew() {
+function ClientsGalleryNew({ clientsData = [] }) {
     const [activeFilter, setActiveFilter] = useState('All')
     const [selectedImage, setSelectedImage] = useState(null)
 
+    const safeClients = Array.isArray(clientsData) ? clientsData : [];
     const filteredClients = activeFilter === 'All'
-        ? clientsData
-        : clientsData.filter(client => client.category === activeFilter)
+        ? safeClients
+        : safeClients.filter(client => client.category === activeFilter);
 
     const handleNext = () => {
         const currentIndex = filteredClients.findIndex(c => c.id === selectedImage.id)
@@ -65,9 +64,9 @@ function ClientsGalleryNew() {
                 {/* Masonry Grid */}
                 <div className="gallery-grid">
                     <AnimatePresence mode="wait">
-                        {filteredClients.map((client, index) => (
+                        {filteredClients.length > 0 ? filteredClients.map((client, index) => (
                             <motion.div
-                                key={client.id}
+                                key={client.id || index}
                                 className="gallery-card"
                                 layout
                                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -78,6 +77,14 @@ function ClientsGalleryNew() {
                                     delay: index * 0.1,
                                     layout: { duration: 0.4 }
                                 }}
+                                >
+                                <img src={client.image || ''} alt={client.name || 'No name'} />
+                                <div className="gallery-card-info">
+                                    <h4>{client.name || 'Untitled'}</h4>
+                                    <p>{client.description || 'No description.'}</p>
+                                </div>
+                            </motion.div>
+                        )) : <div>No clients available.</div>}
                                 whileHover={{ scale: 1.03, y: -5 }}
                                 onClick={() => setSelectedImage(client)}
                             >
