@@ -10,14 +10,27 @@ function Home() {
   const [bioContent, setBioContent] = useState(null)
   const [siteText, setSiteText] = useState(() => loadSiteText())
   const [latestWorkPosts, setLatestWorkPosts] = useState(() => loadLatestWorkPosts())
+  const [clients, setClients] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [activeFilter, setActiveFilter] = useState('All')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
 
   const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
 
-  // Use latestWorkPosts from admin panel for My Work section
-  const clients = Array.isArray(latestWorkPosts) ? latestWorkPosts : [];
+  // Fetch real clients from backend
+  useEffect(() => {
+    async function fetchClients() {
+      try {
+        const res = await fetch('/api/clients')
+        const data = await res.json()
+        setClients(Array.isArray(data.clients) ? data.clients : [])
+        console.log('API clients:', data)
+      } catch (err) {
+        console.error('Failed to load clients', err)
+      }
+    }
+    fetchClients()
+  }, [])
 
   const filteredClients = clients.filter(client => {
     const matchesCategory = activeFilter === 'All' || (client.categories && client.categories.includes(activeFilter));
@@ -26,18 +39,31 @@ function Home() {
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem('personalData')
-    if (saved) {
-      setTimeout(() => setPersonalData(JSON.parse(saved)), 0)
+    // Fetch from backend
+    async function fetchAll() {
+      try {
+        const pdRes = await fetch('/api/admin-data/personalData')
+        const bioRes = await fetch('/api/admin-data/bioContent')
+        const siteTextRes = await fetch('/api/admin-data/siteText')
+        const latestWorkRes = await fetch('/api/admin-data/latestWorkPosts')
+        const pd = pdRes.ok ? await pdRes.json() : null
+        const bio = bioRes.ok ? await bioRes.json() : null
+        const st = siteTextRes.ok ? await siteTextRes.json() : null
+        const lw = latestWorkRes.ok ? await latestWorkRes.json() : null
+        setPersonalData(pd?.value || null)
+        setBioContent(bio?.value || null)
+        setSiteText(st?.value || loadSiteText())
+        setLatestWorkPosts(Array.isArray(lw?.value) ? lw.value : loadLatestWorkPosts())
+        // Log API data
+        console.log('API personalData:', pd)
+        console.log('API bioContent:', bio)
+        console.log('API siteText:', st)
+        console.log('API latestWorkPosts:', lw)
+      } catch (err) {
+        console.error('Failed to load API data', err)
+      }
     }
-
-    const savedBio = localStorage.getItem('bioContent')
-    if (savedBio) {
-      setTimeout(() => setBioContent(JSON.parse(savedBio)), 0)
-    }
-
-    setTimeout(() => setSiteText(loadSiteText()), 0)
-    setTimeout(() => setLatestWorkPosts(loadLatestWorkPosts()), 0)
+    fetchAll()
   }, [])
 
   const aboutTitle = bioContent?.aboutTitle || 'A Glimpse into the Journey..'

@@ -18,6 +18,7 @@ const MediaItem = ({ item, className, onClick }: { item: MediaItemType, classNam
     const videoRef = useRef<HTMLVideoElement>(null); // Reference for video element
     const [isInView, setIsInView] = useState(false); // To track if video is in the viewport
     const [isBuffering, setIsBuffering] = useState(true);  // To track if video is buffering
+    const [imgError, setImgError] = useState(false); // Track image load errors
 
     // Intersection Observer to detect if video is in view and play/pause accordingly
     useEffect(() => {
@@ -119,14 +120,59 @@ const MediaItem = ({ item, className, onClick }: { item: MediaItemType, classNam
     }
 
     return (
-        <img
-            src={item.url} // Image source URL
-            alt={item.title} // Alt text for the image
-            className={`${className} object-cover cursor-pointer`} // Style the image
-            onClick={onClick} // Trigger onClick when the image is clicked
-            loading="lazy" // Lazy load the image for performance
-            decoding="async" // Decode the image asynchronously
-        />
+        <div
+            className={`${className} cursor-pointer`}
+            onClick={onClick}
+            style={{
+                background: item.url?.startsWith('linear-gradient') ? item.url : 'none',
+                backgroundColor: item.url?.startsWith('linear-gradient') ? undefined : '#e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+            }}
+        >
+            {item.url?.startsWith('linear-gradient') ? (
+                <div className="text-white text-4xl md:text-5xl font-bold">
+                    {item.title?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+            ) : item.type === 'video' ? (
+                <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover"
+                    onClick={onClick}
+                    playsInline
+                    muted
+                    loop
+                    preload="auto"
+                    style={{
+                        opacity: isBuffering ? 0.8 : 1,
+                        transition: 'opacity 0.2s',
+                    }}
+                >
+                    <source src={item.url} type="video/mp4" />
+                </video>
+            ) : imgError || !item.url ? (
+                <div className="text-gray-500 text-4xl md:text-5xl font-bold">
+                    {item.title?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+            ) : (
+                <img
+                    src={item.url}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => {
+                        console.log('Image failed to load:', item.url?.substring(0, 50))
+                        setImgError(true)
+                    }}
+                    onLoad={() => {
+                        console.log('Image loaded successfully:', item.title)
+                    }}
+                />
+            )}
+        </div>
     );
 };
 
@@ -142,8 +188,25 @@ interface GalleryModalProps {
 }
 const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaItems }: GalleryModalProps) => {
     const [dockPosition, setDockPosition] = useState({ x: 0, y: 0 });  // Track the position of the dockable panel
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    
+    // Get all images for the selected client (from allImages array or single url)
+    const clientImages = selectedItem?.allImages && selectedItem.allImages.length > 0 
+        ? selectedItem.allImages 
+        : [selectedItem?.url].filter(Boolean);
 
-    if (!isOpen) return null; // Return null if the modal is not open
+    if (!isOpen || !selectedItem) return null; // Return null if the modal is not open
+
+    const currentImage = clientImages[currentImageIndex];
+    const currentItem = { ...selectedItem, url: currentImage };
+
+    const handleNext = () => {
+        setCurrentImageIndex((prev) => (prev + 1) % clientImages.length);
+    };
+
+    const handlePrev = () => {
+        setCurrentImageIndex((prev) => (prev - 1 + clientImages.length) % clientImages.length);
+    };
 
     return (
         <>
@@ -162,17 +225,18 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
 
             >
                 {/* Main Content */}
-                <div className="h-full flex flex-col">
+                <div className="h-full flex flex-col relative">
                     <div className="flex-1 p-2 sm:p-3 md:p-4 flex items-center justify-center bg-gray-50/50">
                         <AnimatePresence mode="wait">
                             <motion.div
-                                key={selectedItem.id}
+                                key={currentImageIndex}
                                 className="relative w-full aspect-[16/9] max-w-[95%] sm:max-w-[85%] md:max-w-3xl
                                          h-auto max-h-[70vh] rounded-lg overflow-hidden shadow-md"
-                                initial={{ y: 20, scale: 0.97 }}
+                                initial={{ y: 20, scale: 0.97, opacity: 0 }}
                                 animate={{
                                     y: 0,
                                     scale: 1,
+                                    opacity: 1,
                                     transition: {
                                         type: "spring",
                                         stiffness: 500,
@@ -183,15 +247,20 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
                                 exit={{
                                     y: 20,
                                     scale: 0.97,
+                                    opacity: 0,
                                     transition: { duration: 0.15 }
                                 }}
-                                onClick={onClose}
                             >
-                                <MediaItem item={selectedItem} className="w-full h-full object-contain bg-gray-900/20" onClick={onClose} />
+                                <MediaItem item={currentItem} className="w-full h-full object-contain bg-gray-900/20" onClick={() => {}} />
                                 <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 md:p-4
                                               bg-gradient-to-t from-black/50 to-transparent">
                                     <h3 className="text-white text-base sm:text-lg md:text-xl font-semibold">
                                         {selectedItem.title}
+                                        {clientImages.length > 1 && (
+                                            <span className="text-white/60 text-sm ml-2">
+                                                ({currentImageIndex + 1} / {clientImages.length})
+                                            </span>
+                                        )}
                                     </h3>
                                     <p className="text-white/80 text-xs sm:text-sm mt-1">
                                         {selectedItem.desc}
@@ -200,13 +269,37 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
                             </motion.div>
                         </AnimatePresence>
                     </div>
+
+                    {/* Navigation Arrows for multiple images */}
+                    {clientImages.length > 1 && (
+                        <>
+                            <button
+                                onClick={handlePrev}
+                                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-2 rounded-full 
+                                         bg-black/50 text-white hover:bg-black/70 transition-colors z-20"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={handleNext}
+                                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-2 rounded-full 
+                                         bg-black/50 text-white hover:bg-black/70 transition-colors z-20"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 {/* Close Button */}
                 <motion.button
                     className="absolute top-2 sm:top-2.5 md:top-3 right-2 sm:right-2.5 md:right-3
                               p-2 rounded-full bg-gray-200/80 text-gray-700 hover:bg-gray-300/80
-                              text-xs sm:text-sm backdrop-blur-sm "
+                              text-xs sm:text-sm backdrop-blur-sm z-30"
                     onClick={onClose}
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
@@ -216,7 +309,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
 
             </motion.div>
 
-            {/* Draggable Dock */}
+            {/* Draggable Dock - Show thumbnails of all client images */}
             <motion.div
                 drag
                 dragMomentum={false}
@@ -237,51 +330,54 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
                              cursor-grab active:cursor-grabbing"
                 >
                     <div className="flex items-center -space-x-2 px-3 py-2">
-                        {mediaItems.map((item, index) => (
-                            <motion.div
-                                key={item.id}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedItem(item);
-                                }}
-                                style={{
-                                    zIndex: selectedItem.id === item.id ? 30 : mediaItems.length - index,
-                                }}
-                                className={`
-                                    relative group
-                                    w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex-shrink-0
-                                    rounded-lg overflow-hidden
-                                    cursor-pointer hover:z-20
-                                    ${selectedItem.id === item.id
-                                        ? 'ring-2 ring-white/70 shadow-lg'
-                                        : 'hover:ring-2 hover:ring-white/30'}
-                                `}
-                                initial={{ rotate: index % 2 === 0 ? -15 : 15 }}
-                                animate={{
-                                    scale: selectedItem.id === item.id ? 1.2 : 1,
-                                    rotate: selectedItem.id === item.id ? 0 : index % 2 === 0 ? -15 : 15,
-                                    y: selectedItem.id === item.id ? -8 : 0,
-                                }}
-                                whileHover={{
-                                    scale: 1.3,
-                                    rotate: 0,
-                                    y: -10,
-                                    transition: { type: "spring", stiffness: 400, damping: 25 }
-                                }}
-                            >
-                                <MediaItem item={item} className="w-full h-full" onClick={() => setSelectedItem(item)} />
-                                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-white/20" />
-                                {selectedItem.id === item.id && (
-                                    <motion.div
-                                        layoutId="activeGlow"
-                                        className="absolute -inset-2 bg-white/20 blur-xl"
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        transition={{ duration: 0.2 }}
-                                    />
-                                )}
-                            </motion.div>
-                        ))}
+                        {clientImages.map((imgUrl, index) => {
+                            const thumbItem = { ...selectedItem, url: imgUrl };
+                            return (
+                                <motion.div
+                                    key={index}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCurrentImageIndex(index);
+                                    }}
+                                    style={{
+                                        zIndex: currentImageIndex === index ? 30 : clientImages.length - index,
+                                    }}
+                                    className={`
+                                        relative group
+                                        w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex-shrink-0
+                                        rounded-lg overflow-hidden
+                                        cursor-pointer hover:z-20
+                                        ${currentImageIndex === index
+                                            ? 'ring-2 ring-white/70 shadow-lg'
+                                            : 'hover:ring-2 hover:ring-white/30'}
+                                    `}
+                                    initial={{ rotate: index % 2 === 0 ? -15 : 15 }}
+                                    animate={{
+                                        scale: currentImageIndex === index ? 1.2 : 1,
+                                        rotate: currentImageIndex === index ? 0 : index % 2 === 0 ? -15 : 15,
+                                        y: currentImageIndex === index ? -8 : 0,
+                                    }}
+                                    whileHover={{
+                                        scale: 1.3,
+                                        rotate: 0,
+                                        y: -10,
+                                        transition: { type: "spring", stiffness: 400, damping: 25 }
+                                    }}
+                                >
+                                    <MediaItem item={thumbItem} className="w-full h-full" onClick={() => setCurrentImageIndex(index)} />
+                                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-white/20" />
+                                    {currentImageIndex === index && (
+                                        <motion.div
+                                            layoutId="activeGlow"
+                                            className="absolute -inset-2 bg-white/20 blur-xl"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            transition={{ duration: 0.2 }}
+                                        />
+                                    )}
+                                </motion.div>
+                            )
+                        })}
                     </div>
                 </motion.div>
             </motion.div>
@@ -295,33 +391,38 @@ interface InteractiveBentoGalleryProps {
     mediaItems: MediaItemType[]
     title: string
     description: string
-
+    showTitle?: boolean
 }
 
-const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({ mediaItems, title, description }) => {
+const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({ mediaItems, title, description, showTitle = true }) => {
     const [selectedItem, setSelectedItem] = useState<MediaItemType | null>(null);
     const [items, setItems] = useState(mediaItems);
     const [isDragging, setIsDragging] = useState(false);
 
     return (
         <div className="w-full">
-            <div className="pt-12 md:pt-16 lg:pt-20 pb-20 md:pb-28 lg:pb-32 text-center">
-                <motion.h1
-                    className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 md:mb-8"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                >
-                    {title}
-                </motion.h1>
-                <motion.p
-                    className="mt-4 md:mt-6 text-base sm:text-lg md:text-xl text-white/90 max-w-2xl mx-auto px-4"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.1 }}
-                >
-                    {description}
-                </motion.p>
+            {/* Keep spacing even when title is hidden */}
+            <div className={showTitle ? "pt-12 md:pt-16 lg:pt-20 pb-20 md:pb-28 lg:pb-32 text-center" : "pt-8 pb-8"}>
+                {showTitle && (
+                    <>
+                        <motion.h1
+                            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 md:mb-8"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5 }}
+                        >
+                            {title}
+                        </motion.h1>
+                        <motion.p
+                            className="mt-4 md:mt-6 text-base sm:text-lg md:text-xl text-white/90 max-w-2xl mx-auto px-4"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: 0.1 }}
+                        >
+                            {description}
+                        </motion.p>
+                    </>
+                )}
             </div>
             <AnimatePresence mode="wait">
                 {selectedItem ? (
@@ -334,7 +435,7 @@ const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({ media
                     />
                 ) : (
                     <motion.div
-                        className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-5 lg:gap-6 auto-rows-[240px] md:auto-rows-[280px] w-full mx-auto"
+                        className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5 lg:gap-6 auto-rows-[200px] sm:auto-rows-[240px] md:auto-rows-[280px] w-full mx-auto px-8 md:px-16 lg:px-24"
                         initial="hidden"
                         animate="visible"
                         exit="hidden"

@@ -29,19 +29,26 @@ function ClientManagement() {
   const [formData, setFormData] = useState({
     name: '',
     logo: '',
+    images: [],
     categories: [],
     description: ''
   })
 
   const handleAdd = () => {
     setEditingClient(null)
-    setFormData({ name: '', logo: '', categories: [], description: '' })
+    setFormData({ name: '', logo: '', images: [], categories: [], description: '' })
     setShowModal(true)
   }
 
   const handleEdit = (client) => {
     setEditingClient(client)
-    setFormData(client)
+    setFormData({
+      name: client.name || '',
+      logo: client.logo || '',
+      images: client.images || [],
+      categories: client.categories || [],
+      description: client.description || ''
+    })
     setShowModal(true)
   }
 
@@ -66,6 +73,32 @@ function ClientManagement() {
       ? formData.categories.filter(c => c !== category)
       : [...formData.categories, category]
     setFormData({ ...formData, categories: newCategories })
+  }
+
+  const handleFileUpload = (e, field) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setFormData({ ...formData, [field]: reader.result })
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setFormData({ ...formData, images: [...formData.images, reader.result] })
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleRemoveImage = (index) => {
+    setFormData({ ...formData, images: formData.images.filter((_, i) => i !== index) })
   }
 
   const handleSubmit = async (e) => {
@@ -178,13 +211,95 @@ function ClientManagement() {
                 />
               </div>
               <div className="form-group">
-                <label>Logo URL</label>
+                <label>Logo/Image URL</label>
                 <input
                   type="text"
                   value={formData.logo}
                   onChange={(e) => setFormData({ ...formData, logo: e.target.value })}
-                  placeholder="Enter logo URL"
+                  placeholder="Enter logo/image URL"
                 />
+                <div className="file-upload-container" style={{ marginTop: '0.5rem' }}>
+                  <label className="file-upload-btn" style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}>
+                    📁 Upload Logo/Image
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      onChange={(e) => handleFileUpload(e, 'logo')}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  {formData.logo && (
+                    <div className="image-preview" style={{ marginTop: '0.5rem', maxWidth: '200px' }}>
+                      {formData.logo.endsWith('.mp4') ? (
+                        <video src={formData.logo} controls style={{ width: '100%', borderRadius: '8px' }} />
+                      ) : (
+                        <img src={formData.logo} alt="Logo preview" style={{ width: '100%', borderRadius: '8px' }} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Gallery Images (Multiple)</label>
+                <p style={{ fontSize: '0.75rem', color: '#666', marginBottom: '0.5rem' }}>
+                  Upload multiple images for this client to appear in the gallery
+                </p>
+                <div className="file-upload-container" style={{ marginTop: '0.5rem' }}>
+                  <label className="file-upload-btn" style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}>
+                    📁 Upload Gallery Images
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files)
+                        files.forEach(file => {
+                          const reader = new FileReader()
+                          reader.onloadend = () => {
+                            setFormData(prev => ({ ...prev, images: [...prev.images, reader.result] }))
+                          }
+                          reader.readAsDataURL(file)
+                        })
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                </div>
+                {formData.images && formData.images.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '0.75rem' }}>
+                    {formData.images.map((img, idx) => (
+                      <div key={idx} style={{ position: 'relative' }}>
+                        {img.endsWith('.mp4') ? (
+                          <video src={img} style={{ width: '100%', borderRadius: '8px' }} />
+                        ) : (
+                          <img src={img} alt={`Gallery ${idx + 1}`} style={{ width: '100%', borderRadius: '8px' }} />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImage(idx)}
+                          style={{
+                            position: 'absolute',
+                            top: '2px',
+                            right: '2px',
+                            background: 'rgba(255,0,0,0.8)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label>Categories</label>
