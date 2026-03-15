@@ -1,6 +1,7 @@
 /* Clients Gallery New - Main Section */
+/* Set gallery section background to white */
 .clients-gallery-new {
-    background: var(--section-bg);
+    background: #fff;
     padding: 5rem 2rem;
     min-height: 100vh;
     position: relative;

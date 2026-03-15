@@ -13,9 +13,12 @@
     "start:prod": "npm run build && npm start"
   },
   "dependencies": {
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "form-data": "^4.0.5",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.562.0",
+    "multer": "^2.1.1",
     "pg": "^8.20.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

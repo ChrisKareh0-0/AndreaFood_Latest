@@ -7,21 +7,37 @@ import { X } from 'lucide-react';
 // MediaItemType defines the structure of a media item
 interface MediaItemType {
     id: number;
-    type: string;
+    type: 'image' | 'video';
     title: string;
     desc: string;
     url: string;
     span: string;
+    categories?: string[];
+    allImages?: string[];
 }
 // MediaItem component renders either a video or image based on item.type
-const MediaItem = ({ item, className, onClick }: { item: MediaItemType, className?: string, onClick?: () => void }) => {
-    const videoRef = useRef<HTMLVideoElement>(null); // Reference for video element
+const MediaItem = ({ item, className, onClick, videoRef }: { 
+    item: MediaItemType, 
+    className?: string, 
+    onClick?: () => void,
+    videoRef?: React.RefObject<HTMLVideoElement>
+}) => {
+    const localVideoRef = useRef<HTMLVideoElement>(null); // Reference for video element
+    const videoElementRef = videoRef || localVideoRef; // Use external ref if provided, otherwise use local
     const [isInView, setIsInView] = useState(false); // To track if video is in the viewport
     const [isBuffering, setIsBuffering] = useState(true);  // To track if video is buffering
     const [imgError, setImgError] = useState(false); // Track image load errors
+    const [videoError, setVideoError] = useState(false); // Track video load errors
+
+    // Helper to check if URL is a video
+    const isVideoUrl = (url: string): boolean => {
+        return url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov');
+    };
 
     // Intersection Observer to detect if video is in view and play/pause accordingly
     useEffect(() => {
+        if (item.type !== 'video' && !isVideoUrl(item.url)) return;
+
         const options = {
             root: null,
             rootMargin: '50px',
@@ -34,37 +50,41 @@ const MediaItem = ({ item, className, onClick }: { item: MediaItemType, classNam
             });
         }, options);
 
-        if (videoRef.current) {
-            observer.observe(videoRef.current); // Start observing the video element
+        if (videoElementRef.current) {
+            observer.observe(videoElementRef.current); // Start observing the video element
         }
 
         return () => {
-            if (videoRef.current) {
-                observer.unobserve(videoRef.current); // Clean up observer when component unmounts
+            if (videoElementRef.current) {
+                observer.unobserve(videoElementRef.current); // Clean up observer when component unmounts
             }
         };
-    }, []);
+    }, [item.type, item.url]);
+
     // Handle video play/pause based on whether the video is in view or not
     useEffect(() => {
+        if (item.type !== 'video' && !isVideoUrl(item.url)) return;
+        if (!isInView) return;
+
         let mounted = true;
 
         const handleVideoPlay = async () => {
-            if (!videoRef.current || !isInView || !mounted) return; // Don't play if video is not in view or component is unmounted
+            if (!videoElementRef.current || !mounted) return;
 
             try {
-                if (videoRef.current.readyState >= 3) {
+                if (videoElementRef.current.readyState >= 3) {
                     setIsBuffering(false);
-                    await videoRef.current.play(); // Play the video if it's ready
+                    await videoElementRef.current.play(); // Play the video if it's ready
                 } else {
                     setIsBuffering(true);
                     await new Promise((resolve) => {
-                        if (videoRef.current) {
-                            videoRef.current.oncanplay = resolve; // Wait until the video can start playing
+                        if (videoElementRef.current) {
+                            videoElementRef.current.oncanplay = resolve; // Wait until the video can start playing
                         }
                     });
                     if (mounted) {
                         setIsBuffering(false);
-                        await videoRef.current.play();
+                        await videoElementRef.current.play();
                     }
                 }
             } catch (error) {
@@ -72,35 +92,45 @@ const MediaItem = ({ item, className, onClick }: { item: MediaItemType, classNam
             }
         };
 
-        if (isInView) {
-            handleVideoPlay();
-        } else if (videoRef.current) {
-            videoRef.current.pause();
-        }
+        handleVideoPlay();
 
         return () => {
             mounted = false;
-            if (videoRef.current) {
-                videoRef.current.pause();
-                videoRef.current.removeAttribute('src');
-                videoRef.current.load();
+            if (videoElementRef.current) {
+                videoElementRef.current.pause();
             }
         };
-    }, [isInView]);
+    }, [isInView, item.type, item.url]);
 
-    // Render either a video or image based on item.type
+    // Determine if this is a video based on type or URL
+    const isVideo = item.type === 'video' || isVideoUrl(item.url);
 
-    if (item.type === 'video') {
+    // Render video
+    if (isVideo) {
+        if (videoError || !item.url) {
+            return (
+                <div className={`${className} flex items-center justify-center bg-gray-900`}>
+                    <div className="text-gray-500 text-4xl md:text-5xl font-bold">
+                        {item.title?.charAt(0)?.toUpperCase() || '?'}
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div className={`${className} relative overflow-hidden`}>
                 <video
-                    ref={videoRef}
+                    ref={videoElementRef}
                     className="w-full h-full object-cover"
                     onClick={onClick}
                     playsInline
                     muted
                     loop
                     preload="auto"
+                    onError={() => {
+                        console.warn('Video failed to load:', item.url?.substring(0, 50));
+                        setVideoError(true);
+                    }}
                     style={{
                         opacity: isBuffering ? 0.8 : 1,
                         transition: 'opacity 0.2s',
@@ -119,12 +149,13 @@ const MediaItem = ({ item, className, onClick }: { item: MediaItemType, classNam
         );
     }
 
+    // Render image
     return (
         <div
             className={`${className} cursor-pointer`}
             onClick={onClick}
             style={{
-                background: item.url?.startsWith('linear-gradient') ? item.url : 'none',
+                background: item.url?.startsWith('linear-gradient') ? item.url : '#e2e8f0',
                 backgroundColor: item.url?.startsWith('linear-gradient') ? undefined : '#e2e8f0',
                 display: 'flex',
                 alignItems: 'center',
@@ -132,27 +163,7 @@ const MediaItem = ({ item, className, onClick }: { item: MediaItemType, classNam
                 overflow: 'hidden',
             }}
         >
-            {item.url?.startsWith('linear-gradient') ? (
-                <div className="text-white text-4xl md:text-5xl font-bold">
-                    {item.title?.charAt(0)?.toUpperCase() || '?'}
-                </div>
-            ) : item.type === 'video' ? (
-                <video
-                    ref={videoRef}
-                    className="w-full h-full object-cover"
-                    onClick={onClick}
-                    playsInline
-                    muted
-                    loop
-                    preload="auto"
-                    style={{
-                        opacity: isBuffering ? 0.8 : 1,
-                        transition: 'opacity 0.2s',
-                    }}
-                >
-                    <source src={item.url} type="video/mp4" />
-                </video>
-            ) : imgError || !item.url ? (
+            {imgError || !item.url ? (
                 <div className="text-gray-500 text-4xl md:text-5xl font-bold">
                     {item.title?.charAt(0)?.toUpperCase() || '?'}
                 </div>
@@ -163,12 +174,12 @@ const MediaItem = ({ item, className, onClick }: { item: MediaItemType, classNam
                     className="w-full h-full object-cover"
                     loading="lazy"
                     decoding="async"
-                    onError={() => {
-                        console.log('Image failed to load:', item.url?.substring(0, 50))
-                        setImgError(true)
+                    onError={(e) => {
+                        console.warn('Image failed to load:', item.url?.substring(0, 50));
+                        setImgError(true);
                     }}
                     onLoad={() => {
-                        console.log('Image loaded successfully:', item.title)
+                        console.log('Image loaded:', item.title);
                     }}
                 />
             )}
@@ -187,18 +198,63 @@ interface GalleryModalProps {
     mediaItems: MediaItemType[]; // List of media items to display in the modal
 }
 const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaItems }: GalleryModalProps) => {
-    const [dockPosition, setDockPosition] = useState({ x: 0, y: 0 });  // Track the position of the dockable panel
+    const [dockPosition, setDockPosition] = useState({ x: 0, y: 0 });
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const videoRef = useRef<HTMLVideoElement>(null);
+
     // Get all images for the selected client (from allImages array or single url)
-    const clientImages = selectedItem?.allImages && selectedItem.allImages.length > 0 
-        ? selectedItem.allImages 
+    const clientImages = selectedItem?.allImages && selectedItem.allImages.length > 0
+        ? selectedItem.allImages
         : [selectedItem?.url].filter(Boolean);
 
-    if (!isOpen || !selectedItem) return null; // Return null if the modal is not open
+    if (!isOpen || !selectedItem) return null;
 
     const currentImage = clientImages[currentImageIndex];
-    const currentItem = { ...selectedItem, url: currentImage };
+    const isCurrentVideo = currentImage?.endsWith('.mp4') ||
+                          currentImage?.endsWith('.webm') ||
+                          currentImage?.endsWith('.mov') ||
+                          selectedItem.categories?.includes('TVC');
+
+    const currentItem = {
+        ...selectedItem,
+        url: currentImage,
+        type: isCurrentVideo ? 'video' : 'image' as 'video' | 'image'
+    };
+
+    // Toggle fullscreen
+    const toggleFullscreen = async () => {
+        const container = document.querySelector('.modal-content-container');
+        try {
+            if (!document.fullscreenElement) {
+                await container?.requestFullscreen();
+                setIsFullscreen(true);
+            } else {
+                await document.exitFullscreen();
+                setIsFullscreen(false);
+            }
+        } catch (err) {
+            console.error('Fullscreen error:', err);
+        }
+    };
+
+    // Listen for fullscreen changes
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        };
+    }, []);
+
+    // Auto-play video when entering fullscreen
+    useEffect(() => {
+        if (isFullscreen && isCurrentVideo && videoRef.current) {
+            videoRef.current.play().catch(console.warn);
+        }
+    }, [isFullscreen, isCurrentVideo]);
 
     const handleNext = () => {
         setCurrentImageIndex((prev) => (prev + 1) % clientImages.length);
@@ -210,103 +266,138 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
 
     return (
         <>
+            {/* Backdrop overlay - click to close */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                onClick={onClose}
+            />
             {/* Main Modal */}
             <motion.div
-                initial={{ scale: 0.98 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.98 }}
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
                 transition={{
                     type: "spring",
                     stiffness: 400,
                     damping: 30
                 }}
-                className="fixed inset-0 w-full min-h-screen sm:h-[90vh] md:h-[600px] backdrop-blur-lg
-                          rounded-none sm:rounded-lg md:rounded-xl overflow-hidden z-10"
-
+                className="fixed inset-0 flex items-center justify-center z-[60] pointer-events-none"
             >
-                {/* Main Content */}
-                <div className="h-full flex flex-col relative">
-                    <div className="flex-1 p-2 sm:p-3 md:p-4 flex items-center justify-center bg-gray-50/50">
-                        <AnimatePresence mode="wait">
-                            <motion.div
-                                key={currentImageIndex}
-                                className="relative w-full aspect-[16/9] max-w-[95%] sm:max-w-[85%] md:max-w-3xl
-                                         h-auto max-h-[70vh] rounded-lg overflow-hidden shadow-md"
-                                initial={{ y: 20, scale: 0.97, opacity: 0 }}
-                                animate={{
-                                    y: 0,
-                                    scale: 1,
-                                    opacity: 1,
-                                    transition: {
-                                        type: "spring",
-                                        stiffness: 500,
-                                        damping: 30,
-                                        mass: 0.5
-                                    }
-                                }}
-                                exit={{
-                                    y: 20,
-                                    scale: 0.97,
-                                    opacity: 0,
-                                    transition: { duration: 0.15 }
-                                }}
-                            >
-                                <MediaItem item={currentItem} className="w-full h-full object-contain bg-gray-900/20" onClick={() => {}} />
-                                <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 md:p-4
-                                              bg-gradient-to-t from-black/50 to-transparent">
-                                    <h3 className="text-white text-base sm:text-lg md:text-xl font-semibold">
-                                        {selectedItem.title}
-                                        {clientImages.length > 1 && (
-                                            <span className="text-white/60 text-sm ml-2">
-                                                ({currentImageIndex + 1} / {clientImages.length})
-                                            </span>
-                                        )}
-                                    </h3>
-                                    <p className="text-white/80 text-xs sm:text-sm mt-1">
-                                        {selectedItem.desc}
-                                    </p>
-                                </div>
-                            </motion.div>
-                        </AnimatePresence>
+                <div
+                    className="modal-content-container w-full min-h-screen sm:h-[90vh] md:h-[600px] backdrop-blur-lg
+                              rounded-none sm:rounded-lg md:rounded-xl overflow-hidden pointer-events-auto"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Main Content */}
+                    <div className="h-full flex flex-col relative">
+                        <div className="flex-1 p-2 sm:p-3 md:p-4 flex items-center justify-center bg-gray-50/50">
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={currentImageIndex}
+                                    className="relative w-full aspect-[16/9] max-w-[95%] sm:max-w-[85%] md:max-w-3xl
+                                             h-auto max-h-[70vh] rounded-lg overflow-hidden shadow-md"
+                                    initial={{ y: 20, scale: 0.97, opacity: 0 }}
+                                    animate={{
+                                        y: 0,
+                                        scale: 1,
+                                        opacity: 1,
+                                        transition: {
+                                            type: "spring",
+                                            stiffness: 500,
+                                            damping: 30,
+                                            mass: 0.5
+                                        }
+                                    }}
+                                    exit={{
+                                        y: 20,
+                                        scale: 0.97,
+                                        opacity: 0,
+                                        transition: { duration: 0.15 }
+                                    }}
+                                >
+                                    <MediaItem 
+                                        item={currentItem} 
+                                        className="w-full h-full object-contain bg-gray-900/20" 
+                                        onClick={() => {}}
+                                        videoRef={isCurrentVideo ? videoRef : undefined}
+                                    />
+                                    <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 md:p-4
+                                                  bg-gradient-to-t from-black/50 to-transparent">
+                                        <h3 className="text-white text-base sm:text-lg md:text-xl font-semibold">
+                                            {selectedItem.title}
+                                            {clientImages.length > 1 && (
+                                                <span className="text-white/60 text-sm ml-2">
+                                                    ({currentImageIndex + 1} / {clientImages.length})
+                                                </span>
+                                            )}
+                                        </h3>
+                                        <p className="text-white/80 text-xs sm:text-sm mt-1">
+                                            {selectedItem.desc}
+                                        </p>
+                                    </div>
+                                    {/* Fullscreen button for videos */}
+                                    {isCurrentVideo && (
+                                        <button
+                                            onClick={toggleFullscreen}
+                                            className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white
+                                                     hover:bg-black/70 transition-colors z-30"
+                                            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                                        >
+                                            {isFullscreen ? (
+                                                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m4-4l-5 5m11-5v-4m0 4h-4m4 0l-5-5" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                    )}
+                                </motion.div>
+                            </AnimatePresence>
+                        </div>
+
+                        {/* Navigation Arrows for multiple images */}
+                        {clientImages.length > 1 && (
+                            <>
+                                <button
+                                    onClick={handlePrev}
+                                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-2 rounded-full
+                                             bg-black/50 text-white hover:bg-black/70 transition-colors z-20"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                <button
+                                    onClick={handleNext}
+                                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-2 rounded-full
+                                             bg-black/50 text-white hover:bg-black/70 transition-colors z-20"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                            </>
+                        )}
                     </div>
 
-                    {/* Navigation Arrows for multiple images */}
-                    {clientImages.length > 1 && (
-                        <>
-                            <button
-                                onClick={handlePrev}
-                                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-2 rounded-full 
-                                         bg-black/50 text-white hover:bg-black/70 transition-colors z-20"
-                            >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                </svg>
-                            </button>
-                            <button
-                                onClick={handleNext}
-                                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-2 rounded-full 
-                                         bg-black/50 text-white hover:bg-black/70 transition-colors z-20"
-                            >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                        </>
-                    )}
+                    {/* Close Button - positioned at top right of modal */}
+                    <motion.button
+                        className="absolute top-4 right-4
+                                  p-2 rounded-full bg-white/90 text-gray-800 hover:bg-white
+                                  text-sm backdrop-blur-md shadow-lg z-40"
+                        onClick={onClose}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                    >
+                        <X className='w-5 h-5' />
+                    </motion.button>
                 </div>
-
-                {/* Close Button */}
-                <motion.button
-                    className="absolute top-2 sm:top-2.5 md:top-3 right-2 sm:right-2.5 md:right-3
-                              p-2 rounded-full bg-gray-200/80 text-gray-700 hover:bg-gray-300/80
-                              text-xs sm:text-sm backdrop-blur-sm z-30"
-                    onClick={onClose}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                >
-                    <X className='w-3 h-3' />
-                </motion.button>
-
             </motion.div>
 
             {/* Draggable Dock - Show thumbnails of all client images */}
@@ -322,7 +413,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
                         y: prev.y + info.offset.y
                     }));
                 }}
-                className="fixed z-50 left-1/2 bottom-4 -translate-x-1/2 touch-none"
+                className="fixed z-[70] left-1/2 bottom-4 -translate-x-1/2 touch-none"
             >
                 <motion.div
                     className="relative rounded-xl bg-sky-400/20 backdrop-blur-xl

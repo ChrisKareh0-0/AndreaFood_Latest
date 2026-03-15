@@ -101,16 +101,17 @@ function ClientManagement() {
     setFormData({ ...formData, images: formData.images.filter((_, i) => i !== index) })
   }
 
+  const isVideoFile = (url) => {
+    return url?.endsWith('.mp4') || url?.endsWith('.webm') || url?.endsWith('.mov')
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (editingClient) {
-      // For now, treat as delete+add (no PATCH endpoint)
+      // Update existing client using PUT endpoint
       try {
-        // Delete old client
-        await fetch(`/api/clients/${editingClient.id}`, { method: 'DELETE' })
-        // Add new client
-        const res = await fetch('/api/clients/add', {
-          method: 'POST',
+        const res = await fetch(`/api/clients/${editingClient.id}`, {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
         })
@@ -119,12 +120,13 @@ function ClientManagement() {
           setClients(clients.map(c => c.id === editingClient.id ? data.client : c))
           showToast('Client updated successfully!', 'success')
         } else {
-          showToast('Failed to update client', 'error')
+          showToast(data.error || 'Failed to update client', 'error')
         }
       } catch (err) {
         showToast('Failed to update client', 'error')
       }
     } else {
+      // Add new client
       try {
         const res = await fetch('/api/clients/add', {
           method: 'POST',
@@ -136,7 +138,7 @@ function ClientManagement() {
           setClients([...clients, data.client])
           showToast('Client added successfully!', 'success')
         } else {
-          showToast('Failed to add client', 'error')
+          showToast(data.error || 'Failed to add client', 'error')
         }
       } catch (err) {
         showToast('Failed to add client', 'error')
@@ -211,42 +213,38 @@ function ClientManagement() {
                 />
               </div>
               <div className="form-group">
-                <label>Logo/Image URL</label>
+                <label>Logo (for MyWork section)</label>
                 <input
                   type="text"
                   value={formData.logo}
                   onChange={(e) => setFormData({ ...formData, logo: e.target.value })}
-                  placeholder="Enter logo/image URL"
+                  placeholder="Enter logo image URL"
                 />
                 <div className="file-upload-container" style={{ marginTop: '0.5rem' }}>
                   <label className="file-upload-btn" style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}>
-                    📁 Upload Logo/Image
+                    📁 Upload Logo Image
                     <input
                       type="file"
-                      accept="image/*,video/*"
+                      accept="image/*"
                       onChange={(e) => handleFileUpload(e, 'logo')}
                       style={{ display: 'none' }}
                     />
                   </label>
                   {formData.logo && (
                     <div className="image-preview" style={{ marginTop: '0.5rem', maxWidth: '200px' }}>
-                      {formData.logo.endsWith('.mp4') ? (
-                        <video src={formData.logo} controls style={{ width: '100%', borderRadius: '8px' }} />
-                      ) : (
-                        <img src={formData.logo} alt="Logo preview" style={{ width: '100%', borderRadius: '8px' }} />
-                      )}
+                      <img src={formData.logo} alt="Logo preview" style={{ width: '100%', borderRadius: '8px' }} />
                     </div>
                   )}
                 </div>
               </div>
               <div className="form-group">
-                <label>Gallery Images (Multiple)</label>
+                <label>Gallery Media (Images & Videos for Gallery section, multiple allowed)</label>
                 <p style={{ fontSize: '0.75rem', color: '#666', marginBottom: '0.5rem' }}>
-                  Upload multiple images for this client to appear in the gallery
+                  Upload multiple images and/or videos for this client to appear in the gallery section. Supports: .jpg, .png, .gif, .mp4, .webm, .mov
                 </p>
                 <div className="file-upload-container" style={{ marginTop: '0.5rem' }}>
                   <label className="file-upload-btn" style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}>
-                    📁 Upload Gallery Images
+                    📁 Upload Gallery Media
                     <input
                       type="file"
                       accept="image/*,video/*"
@@ -269,11 +267,23 @@ function ClientManagement() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '0.75rem' }}>
                     {formData.images.map((img, idx) => (
                       <div key={idx} style={{ position: 'relative' }}>
-                        {img.endsWith('.mp4') ? (
-                          <video src={img} style={{ width: '100%', borderRadius: '8px' }} />
+                        {isVideoFile(img) ? (
+                          <video src={img} style={{ width: '100%', borderRadius: '8px' }} controls />
                         ) : (
                           <img src={img} alt={`Gallery ${idx + 1}`} style={{ width: '100%', borderRadius: '8px' }} />
                         )}
+                        <span style={{
+                          position: 'absolute',
+                          top: '4px',
+                          left: '4px',
+                          background: 'rgba(0,0,0,0.7)',
+                          color: 'white',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '10px'
+                        }}>
+                          {isVideoFile(img) ? '🎥' : '🖼️'}
+                        </span>
                         <button
                           type="button"
                           onClick={() => handleRemoveImage(idx)}

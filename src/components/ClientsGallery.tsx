@@ -1,58 +1,99 @@
 import { useState, useEffect } from "react"
 import InteractiveBentoGallery from "@/components/ui/interactive-bento-gallery"
-import { loadSiteText } from "@/content/siteText"
 
-export function ClientsGallery({ mediaItems = [] }) {
-  const siteText = loadSiteText()
-  const [galleryItems, setGalleryItems] = useState<any[]>([])
+interface Client {
+  id: number
+  name: string
+  logo: string
+  images: string[]
+  categories: string[]
+  description: string
+}
+
+interface GalleryMediaItem {
+  id: number
+  type: 'image' | 'video'
+  title: string
+  desc: string
+  url: string
+  span: string
+  categories: string[]
+  allImages: string[]
+}
+
+export function ClientsGallery() {
+  const [galleryItems, setGalleryItems] = useState<GalleryMediaItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Fetch clients from backend to display in gallery
     async function fetchClients() {
       try {
         const res = await fetch('/api/clients')
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`)
+        }
         const data = await res.json()
-        console.log('ClientsGallery API response:', data)
-        const clients = Array.isArray(data.clients) ? data.clients : []
-        console.log('ClientsGallery clients:', clients)
+        const clients: Client[] = Array.isArray(data.clients) ? data.clients : []
 
-        // Transform clients to gallery items - one item per client with all images
-        const transformedItems = clients
-          .filter((client: any) => {
+        // Transform clients to gallery items
+        const transformedItems: GalleryMediaItem[] = clients
+          .filter((client) => {
             // Only include clients that have images or logo
-            return (client.images && client.images.length > 0) || (client.logo && client.logo.trim() !== '')
+            const hasImages = (client.images && client.images.length > 0)
+            const hasLogo = (client.logo && client.logo.trim() !== '')
+            return hasImages || hasLogo
           })
-          .map((client: any, index: number) => {
-            // Get all images for this client (first from images array, fallback to logo)
-            const clientImages = client.images && client.images.length > 0 
-              ? client.images 
-              : [client.logo]
+          .map((client, index) => {
+            // Get all images for this client (images array + logo if exists)
+            const allMedia: string[] = []
+            
+            // Add all images from images array
+            if (client.images && client.images.length > 0) {
+              allMedia.push(...client.images)
+            }
+            
+            // Add logo if it exists and is not already in images
+            if (client.logo && client.logo.trim() !== '') {
+              if (!allMedia.includes(client.logo)) {
+                allMedia.push(client.logo)
+              }
+            }
+
+            // Determine type based on first media item or TVC category
+            const firstMedia = allMedia[0]
+            const isVideo = firstMedia?.endsWith('.mp4') || 
+                           firstMedia?.endsWith('.webm') || 
+                           firstMedia?.endsWith('.mov') ||
+                           client.categories?.includes('TVC')
 
             return {
               id: client.id,
-              type: clientImages[0]?.endsWith('.mp4') || client.categories?.includes('TVC') ? 'video' : 'image',
+              type: isVideo ? 'video' : 'image',
               title: client.name || 'Untitled',
               desc: client.description || 'No description available.',
-              url: clientImages[0], // First image as thumbnail
-              span: getSpanClass(index),
+              url: firstMedia, // First media as thumbnail
+              span: 'col-span-1 row-span-1',
               categories: client.categories || [],
-              allImages: clientImages, // Store all images for modal view
+              allImages: allMedia, // Store all media for modal view
             }
           })
 
-        console.log('ClientsGallery transformedItems:', transformedItems)
         setGalleryItems(transformedItems)
       } catch (err) {
         console.error('Failed to load clients for gallery', err)
+      } finally {
+        setIsLoading(false)
       }
     }
     fetchClients()
   }, [])
 
-  // Determine span class based on index for uniform grid layout
-  const getSpanClass = (index: number) => {
-    // All items have the same size for uniform grid
-    return 'col-span-1 row-span-1'
+  if (isLoading) {
+    return (
+      <section className="w-full bg-[#4a7ba7] py-80 md:py-96 lg:py-[600px] flex justify-center items-center clients-section">
+        <div className="text-white text-xl">Loading gallery...</div>
+      </section>
+    )
   }
 
   return (
@@ -66,7 +107,7 @@ export function ClientsGallery({ mediaItems = [] }) {
             showTitle={false}
           />
         ) : (
-          <div className="text-white text-center">No clients to display.</div>
+          <div className="text-white text-center text-xl">No clients to display.</div>
         )}
       </div>
     </section>

@@ -1,15 +1,50 @@
 // Simple static server for Railway using Express
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const pool = require('./db.cjs');
 const bodyParser = require('body-parser');
+const multer = require('multer');
+const fs = require('fs');
 const app = express();
 
 const port = process.env.PORT || 8080;
 const distPath = path.join(__dirname, 'dist');
+const publicPath = path.join(__dirname, 'public');
+
+// Ensure public directories exist
+const clientsPath = path.join(publicPath, 'clients');
+if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
+if (!fs.existsSync(clientsPath)) fs.mkdirSync(clientsPath, { recursive: true });
 
 app.use(express.static(distPath));
-app.use(bodyParser.json({ limit: '10mb' }));
+app.use('/public', express.static(publicPath));
+app.use('/clients', express.static(clientsPath));
+
+// Multer must be configured before body-parser for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const clientFolder = req.body?.clientFolder || 'unknown';
+    const uploadPath = path.join(clientsPath, clientFolder);
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, safeName);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 500 * 1024 * 1024 } // 500MB limit
+});
+
+// Body parser
+app.use(bodyParser.json({ limit: '500mb' }));
+app.use(bodyParser.urlencoded({ limit: '500mb', extended: true }));
 
 // --- In-memory fallback when DB is unreachable ---
 let useLocalFallback = false;
@@ -102,6 +137,20 @@ app.get('/api/admin-data', async (req, res) => {
   }
 });
 
+// List all admin data as raw rows (for database viewer)
+app.get('/api/admin-data/all', async (req, res) => {
+  try {
+    if (useLocalFallback) {
+      const rows = Object.entries(localStore).map(([key, value]) => ({ key, value }));
+      return res.json({ source: 'local-fallback', rows });
+    }
+    const result = await pool.query('SELECT key, value FROM admin_data ORDER BY key');
+    res.json({ source: 'database', rows: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Load admin data by key
 app.get('/api/admin-data/:key', async (req, res) => {
   const { key } = req.params;
@@ -184,6 +233,39 @@ app.post('/api/clients/add', async (req, res) => {
   }
 });
 
+// Update a client by id
+app.put('/api/clients/:id', async (req, res) => {
+  const clientId = parseInt(req.params.id);
+  const updatedClient = req.body;
+  try {
+    let clients = [];
+    if (useLocalFallback) {
+      const raw = localStore['clients'];
+      if (raw) clients = JSON.parse(raw);
+    } else {
+      const result = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
+      if (result.rows.length > 0) clients = JSON.parse(result.rows[0].value);
+    }
+    const clientIndex = clients.findIndex(c => c.id === clientId);
+    if (clientIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Client not found' });
+    }
+    clients[clientIndex] = { ...clients[clientIndex], ...updatedClient };
+    const value = JSON.stringify(clients);
+    if (useLocalFallback) {
+      localStore['clients'] = value;
+    } else {
+      await pool.query(
+        "INSERT INTO admin_data(key, value) VALUES('clients', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+        [value]
+      );
+    }
+    res.json({ success: true, client: clients[clientIndex], source: useLocalFallback ? 'local-fallback' : 'database' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Delete a client by id
 app.delete('/api/clients/:id', async (req, res) => {
   const clientId = parseInt(req.params.id);
@@ -210,6 +292,53 @@ app.delete('/api/clients/:id', async (req, res) => {
     res.json({ success: true, deleted: before - clients.length, remaining: clients.length, source: useLocalFallback ? 'local-fallback' : 'database' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== MEDIA UPLOAD ENDPOINTS ==========
+// Upload media file (single)
+app.post('/api/media/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const clientFolder = req.body.clientFolder || 'unknown';
+    const fileUrl = `/clients/${clientFolder}/${req.file.filename}`;
+    
+    res.json({
+      success: true,
+      url: fileUrl,
+      path: req.file.path,
+      filename: req.file.filename,
+      size: req.file.size
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Upload multiple files at once
+app.post('/api/media/upload-multiple', upload.array('files', 50), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No files uploaded' });
+    }
+
+    const clientFolder = req.body.clientFolder || 'unknown';
+    const results = req.files.map(file => ({
+      url: `/clients/${clientFolder}/${file.filename}`,
+      filename: file.filename,
+      size: file.size
+    }));
+
+    res.json({
+      success: true,
+      files: results,
+      count: results.length
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

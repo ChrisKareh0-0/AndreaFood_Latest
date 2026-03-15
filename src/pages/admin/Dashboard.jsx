@@ -7,6 +7,7 @@ import ClientManagement from './ClientManagement'
 import CategoryManagement from './CategoryManagement'
 import APITest from './APITest.jsx'
 import ClientsAPITest from './ClientsAPITest.jsx'
+import DatabaseViewer from './DatabaseViewer'
 import './Dashboard.css'
 
 function Dashboard() {
@@ -32,6 +33,7 @@ function Dashboard() {
     { id: 'bio', label: 'Bio & Content', icon: '📝' },
     { id: 'clients', label: 'Clients', icon: '🤝' },
     { id: 'categories', label: 'Categories', icon: '🏷️' },
+    { id: 'database', label: 'Database', icon: '🗄️' },
     { id: 'api-test', label: 'API Test', icon: '🧪' },
     { id: 'clients-api', label: 'Clients API', icon: '🔗' }
   ]
@@ -143,6 +145,7 @@ function Dashboard() {
           {activeSection === 'bio' && <BioManagement />}
           {activeSection === 'clients' && <ClientManagement />}
           {activeSection === 'categories' && <CategoryManagement />}
+          {activeSection === 'database' && <DatabaseViewer />}
           {activeSection === 'api-test' && <APITest />}
           {activeSection === 'clients-api' && <ClientsAPITest />}
         </div>
