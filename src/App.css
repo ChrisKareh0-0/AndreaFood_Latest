@@ -17,21 +17,25 @@
   --card-shadow: rgba(0, 0, 0, 0.1);
   --border-color: rgba(0, 0, 0, 0.1);
   --overlay-bg: rgba(0, 0, 0, 0.85);
+  --nav-bg: rgba(255, 255, 255, 0.1);
+  --nav-border: rgba(255, 255, 255, 0.2);
 }
 
-body.dark-mode {
-  /* Dark mode colors */
-  --bg-primary: #1a1a2e;
-  --bg-secondary: #2d3447;
+html.dark-mode {
+  /* Dark mode colors - Deep Night Theme */
+  --bg-primary: #050508;
+  --bg-secondary: #0a0a12;
   --text-primary: #ffffff;
-  --text-secondary: #b0b8c5;
+  --text-secondary: #a0a8b5;
   --accent-color: #e89a3c;
-  --hero-bg: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-  --section-bg: #1e2838;
-  --card-bg: #2d3447;
-  --card-shadow: rgba(0, 0, 0, 0.7);
-  --border-color: rgba(255, 255, 255, 0.1);
+  --hero-bg: linear-gradient(135deg, #0a0a12 0%, #12121f 100%);
+  --section-bg: #08080f;
+  --card-bg: #0d0d16;
+  --card-shadow: rgba(0, 0, 0, 0.8);
+  --border-color: rgba(255, 255, 255, 0.08);
   --overlay-bg: rgba(0, 0, 0, 0.95);
+  --nav-bg: rgba(5, 5, 8, 0.85);
+  --nav-border: rgba(255, 255, 255, 0.08);
 }
 
 body {
@@ -43,4 +47,9 @@ body {
 .App {
   width: 100%;
   overflow-x: hidden;
+}
+
+/* Dark mode smooth transitions */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }

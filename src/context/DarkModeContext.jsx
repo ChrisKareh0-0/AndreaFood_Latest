@@ -1,41 +1,44 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react';
 
-const DarkModeContext = createContext()
+const DarkModeContext = createContext();
 
 export function DarkModeProvider({ children }) {
-    const [isDarkMode, setIsDarkMode] = useState(() => {
-        // Check localStorage for saved preference
-        const saved = localStorage.getItem('darkMode')
-        return saved ? JSON.parse(saved) : false
-    })
-
-    useEffect(() => {
-        // Save to localStorage whenever dark mode changes
-        localStorage.setItem('darkMode', JSON.stringify(isDarkMode))
-
-        // Add/remove dark-mode class to body
-        if (isDarkMode) {
-            document.body.classList.add('dark-mode')
-        } else {
-            document.body.classList.remove('dark-mode')
-        }
-    }, [isDarkMode])
-
-    const toggleDarkMode = () => {
-        setIsDarkMode(prev => !prev)
+  const [isDark, setIsDark] = useState(() => {
+    // Check localStorage first
+    const saved = localStorage.getItem('darkMode');
+    if (saved !== null) {
+      return saved === 'true';
     }
+    // Default to dark mode
+    return true;
+  });
 
-    return (
-        <DarkModeContext.Provider value={{ isDarkMode, toggleDarkMode }}>
-            {children}
-        </DarkModeContext.Provider>
-    )
+  useEffect(() => {
+    // Update document class when dark mode changes
+    if (isDark) {
+      document.documentElement.classList.add('dark-mode');
+    } else {
+      document.documentElement.classList.remove('dark-mode');
+    }
+    // Save to localStorage
+    localStorage.setItem('darkMode', isDark.toString());
+  }, [isDark]);
+
+  const toggleDarkMode = () => {
+    setIsDark(prev => !prev);
+  };
+
+  return (
+    <DarkModeContext.Provider value={{ isDark, toggleDarkMode }}>
+      {children}
+    </DarkModeContext.Provider>
+  );
 }
 
 export function useDarkMode() {
-    const context = useContext(DarkModeContext)
-    if (!context) {
-        throw new Error('useDarkMode must be used within a DarkModeProvider')
-    }
-    return context
+  const context = useContext(DarkModeContext);
+  if (!context) {
+    throw new Error('useDarkMode must be used within DarkModeProvider');
+  }
+  return context;
 }

@@ -2,6 +2,195 @@
   padding-top: 0;
 }
 
+/* Dark Mode Styles */
+html.dark-mode .home-page {
+  background: var(--bg-primary);
+}
+
+html.dark-mode .hero-section {
+  background: var(--hero-bg);
+}
+
+html.dark-mode .about-section {
+  background: var(--section-bg);
+}
+
+html.dark-mode .about-title,
+html.dark-mode .about-paragraph {
+  color: var(--text-primary);
+}
+
+html.dark-mode .latest-work-section {
+  background: var(--bg-secondary);
+}
+
+html.dark-mode .latest-work-title,
+html.dark-mode .latest-work-description {
+  color: var(--text-primary);
+}
+
+html.dark-mode .work-card {
+  background: var(--card-bg);
+  box-shadow: 0 4px 20px var(--card-shadow);
+}
+
+html.dark-mode .work-title {
+  color: var(--text-primary);
+}
+
+html.dark-mode .work-excerpt {
+  color: var(--text-secondary);
+}
+
+html.dark-mode .my-work-section {
+  background: var(--bg-primary);
+}
+
+html.dark-mode .my-work-title {
+  color: var(--text-primary);
+}
+
+html.dark-mode .search-input {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+html.dark-mode .search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+html.dark-mode .work-card-item {
+  background: var(--card-bg);
+  box-shadow: 0 4px 20px var(--card-shadow);
+}
+
+html.dark-mode .work-card-name {
+  color: var(--text-primary);
+}
+
+html.dark-mode .work-card-description {
+  color: var(--text-secondary);
+}
+
+html.dark-mode .category-badge {
+  background: rgba(232, 154, 60, 0.2);
+  color: #e89a3c;
+}
+
+html.dark-mode .clients-section {
+  background: var(--section-bg);
+}
+
+html.dark-mode .services-section {
+  background: var(--bg-secondary);
+}
+
+html.dark-mode .services-title {
+  color: var(--text-primary);
+}
+
+html.dark-mode .services-description {
+  color: var(--text-secondary);
+}
+
+html.dark-mode .contact-section {
+  background: var(--bg-primary);
+}
+
+html.dark-mode .contact-title {
+  color: var(--text-primary);
+}
+
+html.dark-mode .contact-subtitle,
+html.dark-mode .contact-description {
+  color: var(--text-secondary);
+}
+
+html.dark-mode .form-input,
+html.dark-mode .form-textarea {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+html.dark-mode .form-input::placeholder,
+html.dark-mode .form-textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+html.dark-mode .form-submit {
+  background: var(--accent-color);
+  color: white;
+}
+
+html.dark-mode .footer {
+  background: var(--section-bg);
+}
+
+html.dark-mode .footer p {
+  color: var(--text-secondary);
+}
+
+html.dark-mode .fourth-dimension {
+  color: var(--accent-color);
+}
+
+/* Override #d4e3ed elements in dark mode */
+html.dark-mode .about-section,
+html.dark-mode .latest-work-section,
+html.dark-mode .services-section,
+html.dark-mode .contact-section,
+html.dark-mode .my-work-section,
+html.dark-mode .clients-gallery-section {
+  background: var(--section-bg) !important;
+}
+
+html.dark-mode .placeholder-image,
+html.dark-mode .logo-circle,
+html.dark-mode .work-card-logo,
+html.dark-mode .services-image {
+  background: var(--card-bg) !important;
+  color: var(--text-secondary) !important;
+}
+
+html.dark-mode .filter-btn {
+  background: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+html.dark-mode .filter-btn.active {
+  background: var(--accent-color) !important;
+  color: white !important;
+}
+
+html.dark-mode .hero-title,
+html.dark-mode .hero-subtitle,
+html.dark-mode .work-title,
+html.dark-mode .work-excerpt,
+html.dark-mode .services-title,
+html.dark-mode .contact-title {
+  color: var(--text-primary) !important;
+}
+
+html.dark-mode .latest-work-title {
+  color: #ffffff !important;
+}
+
+html.dark-mode .my-work-title,
+html.dark-mode .services-title,
+html.dark-mode .contact-title {
+  color: #ffffff !important;
+}
+
+html.dark-mode .orange-letter {
+  color: #ffffff !important;
+}
+
+html.dark-mode .circle-accent {
+  color: #ffffff !important;
+}
+
 /* Hero Section */
 .hero-section {
   min-height: 100vh;
@@ -48,6 +237,10 @@
 .about-section {
   background: #d4e3ed;
   padding: 6rem 2rem;
+}
+
+html.dark-mode .about-section {
+  background: var(--section-bg) !important;
 }
 
 .about-container {
@@ -147,12 +340,12 @@
 .latest-work-title {
   font-size: 4rem;
   font-weight: 700;
-  color: #4a7ba7;
+  color: #ffffff;
   margin-bottom: 1.5rem;
 }
 
 .orange-letter {
-  color: #e89a3c;
+  color: #ffffff;
 }
 
 .latest-work-description {
@@ -507,25 +700,15 @@
 .circle-accent {
   position: relative;
   display: inline-block;
+  color: #ffffff;
 }
 
 .circle-accent::before {
-  content: '';
-  position: absolute;
-  width: 3.5rem;
-  height: 3.5rem;
-  background: white;
-  border-radius: 50%;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: -1;
+  display: none;
 }
 
 .my-work-title .circle-accent::before {
-  background: #4a7ba7;
-  width: 4rem;
-  height: 4rem;
+  display: none;
 }
 
 /* Clients Gallery Wrapper */
@@ -563,7 +746,7 @@
 .services-title {
   font-size: 4rem;
   font-weight: 700;
-  color: #4a7ba7;
+  color: #ffffff;
   line-height: 1.1;
   margin-bottom: 2rem;
 }
@@ -659,7 +842,7 @@
 .contact-title {
   font-size: 5rem;
   font-weight: 700;
-  color: #e89a3c;
+  color: #ffffff;
   margin-bottom: 2rem;
 }
 
@@ -982,5 +1165,109 @@
 
   .work-card-description {
     font-size: 0.9rem;
+  }
+}
+
+/* Pagination Styles */
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem 1rem;
+  margin-top: 2rem;
+}
+
+.pagination-btn {
+  padding: 0.75rem 1.5rem;
+  background: #4a7ba7;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: #3d6a8f;
+  transform: translateY(-2px);
+}
+
+.pagination-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pagination-numbers {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pagination-number {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f0f0;
+  color: #333;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.pagination-number:hover {
+  background: #4a7ba7;
+  color: white;
+  border-color: #4a7ba7;
+}
+
+.pagination-number.active {
+  background: #4a7ba7;
+  color: white;
+  border-color: #4a7ba7;
+}
+
+@media (max-width: 768px) {
+  .pagination-controls {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  
+  .pagination-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+  
+  .pagination-numbers {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    margin-top: 0.5rem;
+  }
+  
+  .pagination-number {
+    width: 35px;
+    height: 35px;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .pagination-numbers {
+    flex-wrap: wrap;
+    max-width: 200px;
+  }
+  
+  .pagination-number {
+    width: 32px;
+    height: 32px;
+    font-size: 0.85rem;
   }
 }

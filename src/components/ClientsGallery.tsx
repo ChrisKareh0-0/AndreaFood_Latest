@@ -24,6 +24,8 @@ interface GalleryMediaItem {
 export function ClientsGallery() {
   const [galleryItems, setGalleryItems] = useState<GalleryMediaItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 12
 
   useEffect(() => {
     async function fetchClients() {
@@ -46,12 +48,12 @@ export function ClientsGallery() {
           .map((client, index) => {
             // Get all images for this client (images array + logo if exists)
             const allMedia: string[] = []
-            
+
             // Add all images from images array
             if (client.images && client.images.length > 0) {
               allMedia.push(...client.images)
             }
-            
+
             // Add logo if it exists and is not already in images
             if (client.logo && client.logo.trim() !== '') {
               if (!allMedia.includes(client.logo)) {
@@ -61,8 +63,8 @@ export function ClientsGallery() {
 
             // Determine type based on first media item or TVC category
             const firstMedia = allMedia[0]
-            const isVideo = firstMedia?.endsWith('.mp4') || 
-                           firstMedia?.endsWith('.webm') || 
+            const isVideo = firstMedia?.endsWith('.mp4') ||
+                           firstMedia?.endsWith('.webm') ||
                            firstMedia?.endsWith('.mov') ||
                            client.categories?.includes('TVC')
 
@@ -88,6 +90,13 @@ export function ClientsGallery() {
     fetchClients()
   }, [])
 
+  // Pagination
+  const totalPages = Math.ceil(galleryItems.length / itemsPerPage)
+  const paginatedItems = galleryItems.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
   if (isLoading) {
     return (
       <section className="w-full bg-[#4a7ba7] py-80 md:py-96 lg:py-[600px] flex justify-center items-center clients-section">
@@ -97,19 +106,90 @@ export function ClientsGallery() {
   }
 
   return (
-    <section className="w-full bg-[#4a7ba7] py-80 md:py-96 lg:py-[600px] flex justify-center clients-section">
+    <section className="w-full bg-[#4a7ba7] py-16 md:py-20 lg:py-24 flex flex-col justify-center items-center clients-section">
       <div className="w-full max-w-[1200px] px-8 sm:px-12 md:px-16 lg:px-24 clients-gallery-wrapper">
-        {galleryItems.length > 0 ? (
+        {paginatedItems.length > 0 ? (
           <InteractiveBentoGallery
             title=""
             description=""
-            mediaItems={galleryItems}
+            mediaItems={paginatedItems}
             showTitle={false}
           />
         ) : (
           <div className="text-white text-center text-xl">No clients to display.</div>
         )}
       </div>
+      
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="pagination-controls" style={{ marginTop: '2rem' }}>
+          <button
+            className="pagination-btn"
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: '#fff',
+              color: '#4a7ba7',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              opacity: currentPage === 1 ? 0.6 : 1,
+              transition: 'all 0.3s ease'
+            }}
+          >
+            ← Previous
+          </button>
+          
+          <div className="pagination-numbers" style={{ display: 'flex', gap: '0.5rem' }}>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: currentPage === page ? '#fff' : 'rgba(255,255,255,0.2)',
+                  color: currentPage === page ? '#4a7ba7' : '#fff',
+                  border: currentPage === page ? '2px solid #fff' : '2px solid rgba(255,255,255,0.3)',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                {page}
+              </button>
+            ))}
+          </div>
+          
+          <button
+            className="pagination-btn"
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: '#fff',
+              color: '#4a7ba7',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              opacity: currentPage === totalPages ? 0.6 : 1,
+              transition: 'all 0.3s ease'
+            }}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </section>
   )
 }

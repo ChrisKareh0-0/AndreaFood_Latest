@@ -1,9 +1,12 @@
 import { Link, useLocation } from 'react-router-dom'
 import { loadSiteText } from '@/content/siteText'
+import { useDarkMode } from '../context/DarkModeContext'
+import { Sun, Moon } from 'lucide-react'
 import './Navigation.css'
 
 function Navigation() {
   const location = useLocation()
+  const { isDark, toggleDarkMode } = useDarkMode()
 
   const siteText = loadSiteText()
 
@@ -55,6 +58,16 @@ function Navigation() {
             </li>
           ))}
         </ul>
+
+        {/* Dark Mode Toggle */}
+        <button
+          className="dark-mode-toggle"
+          onClick={toggleDarkMode}
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          aria-label="Toggle dark mode"
+        >
+          {isDark ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
 
         {/* Login button hidden as requested */}
 

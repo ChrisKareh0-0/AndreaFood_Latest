@@ -3,12 +3,53 @@ import './Home.css'
 import { ClientsGallery } from '../components/ClientsGallery'
 import { loadSiteText } from '@/content/siteText'
 import { loadLatestWorkPosts } from '@/content/latestWork'
+import { Filter, Instagram, Facebook, Mail, Phone } from 'lucide-react'
 
 function Home() {
   const [personalData, setPersonalData] = useState(null)
   const [bioContent, setBioContent] = useState(null)
   const [siteText, setSiteText] = useState(() => loadSiteText())
   const [latestWorkPosts, setLatestWorkPosts] = useState(() => loadLatestWorkPosts())
+  const [clients, setClients] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [activeFilter, setActiveFilter] = useState('All')
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 12
+
+  const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
+
+  // Fetch real clients from backend
+  useEffect(() => {
+    async function fetchClients() {
+      try {
+        const res = await fetch('/api/clients')
+        const data = await res.json()
+        setClients(Array.isArray(data.clients) ? data.clients : [])
+      } catch (err) {
+        console.error('Failed to load clients', err)
+      }
+    }
+    fetchClients()
+  }, [])
+
+  const filteredClients = clients.filter(client => {
+    const matchesCategory = activeFilter === 'All' || (client.categories && client.categories.includes(activeFilter));
+    const matchesSearch = (client.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+  const paginatedClients = filteredClients.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset to page 1 when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeFilter, searchTerm]);
 
   useEffect(() => {
     // Fetch from backend
@@ -65,6 +106,20 @@ function Home() {
       <>
         <span className="orange-letter">{safe[0]}</span>
         {safe.slice(1)}
+      </>
+    )
+  }
+
+  const renderWithCircleAccentOnFirstO = (text) => {
+    const safe = String(text || '')
+    const idx = safe.toLowerCase().indexOf('o')
+    if (idx === -1) return safe
+
+    return (
+      <>
+        {safe.slice(0, idx)}
+        <span className="circle-accent">{safe[idx]}</span>
+        {safe.slice(idx + 1)}
       </>
     )
   }
@@ -141,6 +196,114 @@ function Home() {
         </div>
       </section>
 
+      {/* My Work Section */}
+      <section className="my-work-section">
+        <div className="my-work-content-wrapper">
+          <div className="my-work-header">
+            <h2 className="my-work-title">{renderWithCircleAccentOnFirstO(siteText.home.myWorkTitle)}</h2>
+            <div className="my-work-controls">
+              <div className="filter-dropdown-wrapper">
+                <button
+                  className="filter-icon-btn"
+                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                >
+                  <Filter size={20} />
+                  <span className="filter-label">{activeFilter}</span>
+                </button>
+                {showFilterDropdown && (
+                  <div className="filter-dropdown">
+                    {categories.map((category) => (
+                      <button
+                        key={category}
+                        className={`filter-dropdown-item ${activeFilter === category ? 'active' : ''}`}
+                        onClick={() => {
+                          setActiveFilter(category)
+                          setShowFilterDropdown(false)
+                        }}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder={siteText.home.searchPlaceholder}
+              className="search-input"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="work-grid">
+            {paginatedClients.length > 0 ? (
+              paginatedClients.map((client) => (
+                <div key={client.id} className="work-card-item">
+                  <div className="work-card-logo">
+                    {client.logo ? (
+                      <img src={client.logo} alt={client.name || 'Client'} className="client-logo-img" />
+                    ) : (
+                      <div className="logo-circle">{typeof client.name === 'string' && client.name.length > 0 ? client.name.charAt(0) : '?'}</div>
+                    )}
+                  </div>
+                  <h3 className="work-card-name">{client.name}</h3>
+                  <p className="work-card-description">{client.description}</p>
+                  <div className="work-card-categories">
+                    {Array.isArray(client.categories) && client.categories.length > 0 ? (
+                      client.categories.map((cat, idx) => (
+                        <span key={idx} className="category-badge">{cat}</span>
+                      ))
+                    ) : (
+                      <span className="category-badge">No categories</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="no-results">No clients found matching your criteria</div>
+            )}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="pagination-controls">
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                ← Previous
+              </button>
+              
+              <div className="pagination-numbers">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    className={`pagination-number ${currentPage === page ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+              
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Clients Gallery Section */}
       <ClientsGallery />
 
@@ -212,19 +375,19 @@ function Home() {
 
           <div className="footer-contact">
             <div className="footer-social">
-              <a href="#" className="social-icon">
-                <div className="icon-circle"></div>
+              <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="social-icon" title="Instagram">
+                <Instagram size={20} />
               </a>
-              <a href="#" className="social-icon">
-                <div className="icon-circle"></div>
+              <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="social-icon" title="Facebook">
+                <Facebook size={20} />
               </a>
             </div>
-            <a href={`mailto:${email}`} className="footer-email">
-              <div className="icon-circle"></div>
+            <a href={`mailto:${email}`} className="footer-email" title="Email">
+              <Mail size={18} />
               <span>{email}</span>
             </a>
-            <div className="footer-phone">
-              <div className="icon-circle"></div>
+            <div className="footer-phone" title="Phone">
+              <Phone size={18} />
               <span>{phone}</span>
             </div>
           </div>

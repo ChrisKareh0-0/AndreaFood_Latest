@@ -17,6 +17,22 @@ const clientsPath = path.join(publicPath, 'clients');
 if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
 if (!fs.existsSync(clientsPath)) fs.mkdirSync(clientsPath, { recursive: true });
 
+// Load local store if exists (for development without database)
+const localStorePath = path.join(__dirname, '.local-store.json');
+let useLocalFallback = false;
+const localStore = {};
+
+if (fs.existsSync(localStorePath)) {
+  try {
+    const data = JSON.parse(fs.readFileSync(localStorePath, 'utf8'));
+    Object.assign(localStore, data);
+    console.log('✅ Loaded local store from:', localStorePath);
+    useLocalFallback = true;
+  } catch (err) {
+    console.log('⚠️  Could not load local store:', err.message);
+  }
+}
+
 app.use(express.static(distPath));
 app.use('/public', express.static(publicPath));
 app.use('/clients', express.static(clientsPath));
@@ -47,8 +63,7 @@ app.use(bodyParser.json({ limit: '500mb' }));
 app.use(bodyParser.urlencoded({ limit: '500mb', extended: true }));
 
 // --- In-memory fallback when DB is unreachable ---
-let useLocalFallback = false;
-const localStore = {};
+// (useLocalFallback and localStore are already declared above)
 
 async function dbQuery(text, params) {
   if (useLocalFallback) throw new Error('Using local fallback (DB unreachable)');

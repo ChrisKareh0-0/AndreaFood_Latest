@@ -34,6 +34,9 @@ const MediaItem = ({ item, className, onClick, videoRef }: {
         return url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov');
     };
 
+    // Default background for dark mode
+    const defaultBg = '#1a1a2e';
+
     // Intersection Observer to detect if video is in view and play/pause accordingly
     useEffect(() => {
         if (item.type !== 'video' && !isVideoUrl(item.url)) return;
@@ -155,8 +158,8 @@ const MediaItem = ({ item, className, onClick, videoRef }: {
             className={`${className} cursor-pointer`}
             onClick={onClick}
             style={{
-                background: item.url?.startsWith('linear-gradient') ? item.url : '#e2e8f0',
-                backgroundColor: item.url?.startsWith('linear-gradient') ? undefined : '#e2e8f0',
+                background: item.url?.startsWith('linear-gradient') ? item.url : defaultBg,
+                backgroundColor: item.url?.startsWith('linear-gradient') ? undefined : defaultBg,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -293,7 +296,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
                 >
                     {/* Main Content */}
                     <div className="h-full flex flex-col relative">
-                        <div className="flex-1 p-2 sm:p-3 md:p-4 flex items-center justify-center bg-gray-50/50">
+                        <div className="flex-1 p-2 sm:p-3 md:p-4 flex items-center justify-center bg-gray-900/80">
                             <AnimatePresence mode="wait">
                                 <motion.div
                                     key={currentImageIndex}
@@ -389,7 +392,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
                     {/* Close Button - positioned at top right of modal */}
                     <motion.button
                         className="absolute top-4 right-4
-                                  p-2 rounded-full bg-white/90 text-gray-800 hover:bg-white
+                                  p-2 rounded-full bg-gray-800 text-white hover:bg-gray-700
                                   text-sm backdrop-blur-md shadow-lg z-40"
                         onClick={onClose}
                         whileHover={{ scale: 1.1 }}
@@ -565,13 +568,10 @@ const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({ media
                                     onClick={() => setSelectedItem(item)}
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300">
-                                    <div className="absolute bottom-0 left-0 right-0 p-5 md:p-6">
-                                        <h3 className="text-white text-lg md:text-xl lg:text-2xl font-bold mb-2 leading-tight">
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <h3 className="text-white text-lg md:text-xl lg:text-2xl font-bold text-center px-4 leading-tight">
                                             {item.title}
                                         </h3>
-                                        <p className="text-white/95 text-sm md:text-base leading-relaxed">
-                                            {item.desc}
-                                        </p>
                                     </div>
                                 </div>
                             </motion.div>
