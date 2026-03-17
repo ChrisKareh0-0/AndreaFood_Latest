@@ -340,12 +340,12 @@ html.dark-mode .about-section {
 .latest-work-title {
   font-size: 4rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #4a7ba7;
   margin-bottom: 1.5rem;
 }
 
 .orange-letter {
-  color: #ffffff;
+  color: #4a7ba7;
 }
 
 .latest-work-description {
@@ -452,7 +452,7 @@ html.dark-mode .about-section {
 .my-work-title {
   font-size: clamp(2.5rem, 5vw, 5rem);
   font-weight: 700;
-  color: white;
+  color: #4a7ba7;
 }
 
 .my-work-controls {
@@ -746,7 +746,7 @@ html.dark-mode .about-section {
 .services-title {
   font-size: 4rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #4a7ba7;
   line-height: 1.1;
   margin-bottom: 2rem;
 }
@@ -842,7 +842,7 @@ html.dark-mode .about-section {
 .contact-title {
   font-size: 5rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #4a7ba7;
   margin-bottom: 2rem;
 }
 

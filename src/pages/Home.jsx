@@ -158,7 +158,7 @@ function Home() {
             <h2 className="about-image-title">{renderMultilineTitle(siteText.home.meetArtistTitle)}</h2>
             <div className="about-image">
               {personalData?.profileImage ? (
-                <img src={personalData.profileImage} alt="Andrea Abi Khalil" className="profile-image" />
+                <img src={personalData.profileImage} alt="Andrea Abi Khalil" className="profile-image" loading="lazy" decoding="async" />
               ) : (
                 <div className="placeholder-image">{siteText.home.placeholderArtistPhoto}</div>
               )}
@@ -181,7 +181,7 @@ function Home() {
               <article key={post.id} className="work-card">
                 <div className="work-image">
                   {post.imageUrl ? (
-                    <img className="work-image-img" src={post.imageUrl} alt={post.title} />
+                    <img className="work-image-img" src={post.imageUrl} alt={post.title} loading="lazy" decoding="async" />
                   ) : (
                     <div className="placeholder-image">{siteText.home.placeholderPicture}</div>
                   )}
@@ -246,7 +246,7 @@ function Home() {
                 <div key={client.id} className="work-card-item">
                   <div className="work-card-logo">
                     {client.logo ? (
-                      <img src={client.logo} alt={client.name || 'Client'} className="client-logo-img" />
+                      <img src={client.logo} alt={client.name || 'Client'} className="client-logo-img" loading="lazy" decoding="async" />
                     ) : (
                       <div className="logo-circle">{typeof client.name === 'string' && client.name.length > 0 ? client.name.charAt(0) : '?'}</div>
                     )}
