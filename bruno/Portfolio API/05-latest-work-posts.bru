@@ -1,0 +1,16 @@
+meta {
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{url}}/api/admin-data/latestWorkPosts
+  body: none
+  auth: inherit
+}
+
+vars {
+  url: https://your-railway-url.railway.app
+}
+
+name: 05-Latest Work Posts
