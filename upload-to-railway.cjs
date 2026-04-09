@@ -17,6 +17,7 @@ const concurrency = Math.max(
 );
 const dryRun = process.argv.includes('--dry-run');
 const failFast = process.argv.includes('--fail-fast');
+const forceUpload = process.argv.includes('--force');
 
 function fail(message) {
   console.error(`Upload failed: ${message}`);
@@ -155,6 +156,44 @@ function getPathname(value) {
   }
 }
 
+function request(method, inputUrl) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(inputUrl, apiBase);
+    const transport = url.protocol === 'https:' ? https : http;
+    const req = transport.request({
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      method,
+      path: `${url.pathname}${url.search}`,
+    }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => {
+        resolve({
+          status: response.statusCode || 0,
+          body: Buffer.concat(chunks).toString('utf8'),
+        });
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(30000, () => {
+      req.destroy(new Error(`${method} ${url.pathname} timed out`));
+    });
+    req.end();
+  });
+}
+
+async function assetExists(relativeUrl) {
+  const response = await request('HEAD', relativeUrl);
+  return response.status >= 200 && response.status < 300;
+}
+
+function normalizeReturnedPath(value) {
+  return decodeURIComponent(getPathname(value || ''));
+}
+
 function getFormLength(form) {
   return new Promise((resolve, reject) => {
     form.getLength((error, length) => {
@@ -250,6 +289,11 @@ async function main() {
     fail(`MEDIA_SOURCE_PATH does not exist: ${sourceRoot}`);
   }
 
+  const health = await request('GET', '/api/health');
+  if (health.status < 200 || health.status >= 300) {
+    fail(`API health check failed with status ${health.status}`);
+  }
+
   const referencedUrls = readReferencedUrls();
   const fileIndex = buildFileIndex(sourceRoot);
   const resolvedTasks = [];
@@ -291,16 +335,20 @@ async function main() {
       referenced: referencedUrls.length,
       resolved: resolvedTasks.length,
       uploaded: 0,
+      skippedExisting: 0,
       failed: 0,
       missing: missing.length,
       ambiguous: ambiguous.length,
+      urlMismatches: 0,
       uploadedBytes: 0,
       uploadedSize: '0 B',
     },
     uploaded: [],
+    skippedExisting: [],
     failed: [],
     missing,
     ambiguous,
+    urlMismatches: [],
   };
 
   if (!dryRun) {
@@ -317,10 +365,22 @@ async function main() {
       return;
     }
 
+    if (!forceUpload && await assetExists(task.url)) {
+      report.skippedExisting.push({
+        url: task.url,
+        source: task.sourceRelative,
+        match: task.match,
+      });
+      report.totals.skippedExisting += 1;
+      console.log(`${label} skipped (already exists)`);
+      return;
+    }
+
     const startedAt = Date.now();
     try {
       const payload = await uploadResolvedFile(task);
-      const returnedPath = getPathname(payload.url || '');
+      const returnedPath = normalizeReturnedPath(payload.url || '');
+      const expectedPath = normalizeReturnedPath(task.url);
 
       report.uploaded.push({
         url: task.url,
@@ -334,6 +394,18 @@ async function main() {
       report.totals.uploaded += 1;
       report.totals.uploadedBytes += task.bytes;
       report.totals.uploadedSize = formatBytes(report.totals.uploadedBytes);
+
+      if (returnedPath !== expectedPath) {
+        report.urlMismatches.push({
+          url: task.url,
+          returnedUrl: payload.url || '',
+          returnedPath,
+          expectedPath,
+        });
+        report.totals.urlMismatches += 1;
+        console.log(`${label} uploaded with path mismatch (${returnedPath})`);
+        return;
+      }
 
       console.log(`${label} uploaded in ${Date.now() - startedAt}ms (${formatBytes(task.bytes)})`);
     } catch (error) {
@@ -358,13 +430,20 @@ async function main() {
   console.log(`Referenced URLs: ${report.totals.referenced}`);
   console.log(`Resolved files: ${report.totals.resolved}`);
   console.log(`Uploaded: ${report.totals.uploaded}`);
+  console.log(`Skipped existing: ${report.totals.skippedExisting}`);
   console.log(`Failed: ${report.totals.failed}`);
   console.log(`Missing: ${report.totals.missing}`);
   console.log(`Ambiguous: ${report.totals.ambiguous}`);
+  console.log(`URL mismatches: ${report.totals.urlMismatches}`);
   console.log(`Uploaded size: ${report.totals.uploadedSize}`);
   console.log(`Report written to: ${reportPath}`);
 
-  if (report.totals.failed > 0 || report.totals.missing > 0 || report.totals.ambiguous > 0) {
+  if (
+    report.totals.failed > 0 ||
+    report.totals.missing > 0 ||
+    report.totals.ambiguous > 0 ||
+    report.totals.urlMismatches > 0
+  ) {
     process.exitCode = 2;
   }
 }
