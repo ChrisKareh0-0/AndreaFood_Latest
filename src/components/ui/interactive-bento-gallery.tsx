@@ -371,7 +371,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 md:p-6 pointer-events-none"
+        className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto p-2 sm:p-4 md:p-6 pointer-events-none"
         style={{
           paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
           paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
@@ -380,11 +380,11 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
         }}
       >
         <div
-          className="modal-content-container pointer-events-auto relative flex h-full w-full max-h-full max-w-6xl overflow-hidden rounded-2xl bg-gray-950 shadow-2xl sm:h-[88vh]"
+          className="modal-content-container pointer-events-auto relative mt-1 flex h-[min(94dvh,940px)] w-full max-w-6xl overflow-hidden rounded-2xl bg-gray-950 shadow-2xl sm:h-[min(90dvh,940px)]"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex h-full w-full flex-col bg-gray-950">
-            <div className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-black/75 px-4 py-3 text-white backdrop-blur-md">
+            <div className="sticky top-0 z-30 shrink-0 flex items-center justify-between gap-3 border-b border-white/10 bg-black/75 px-4 py-3 text-white backdrop-blur-md">
               <div className="min-w-0">
                 <h3 className="truncate text-base font-semibold sm:text-lg">
                   {selectedItem.title}
@@ -450,7 +450,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
               </AnimatePresence>
             </div>
 
-            <div className="border-t border-white/10 bg-black/80 px-4 py-3 text-white">
+            <div className="shrink-0 border-t border-white/10 bg-black/80 px-4 py-3 text-white">
               <p className="text-sm text-white/80 sm:text-base">
                 {selectedItem.desc}
               </p>
