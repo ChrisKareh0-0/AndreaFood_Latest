@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import InteractiveBentoGallery from "@/components/ui/interactive-bento-gallery"
 
 interface Client {
@@ -19,6 +19,7 @@ interface GalleryMediaItem {
   title: string
   desc: string
   url: string
+  previewUrl?: string
   span: string
   categories: string[]
   sourceClient?: Client
@@ -35,24 +36,28 @@ const isVideoUrl = (url?: string): boolean => {
   return url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov')
 }
 
-const getPreviewUrl = (client?: Client): string => {
-  if (!client) return ''
+const getClientMediaCandidates = (client?: Client): string[] => {
+  if (!client) return []
 
-  const media = [
+  return [
     ...(client.thumbnailUrl ? [client.thumbnailUrl] : []),
     ...(Array.isArray(client.images) ? client.images : []),
-    ...(client.logo ? [client.logo] : [])
+    ...(client.logo ? [client.logo] : []),
   ].filter(Boolean) as string[]
+}
 
-  return media[0] || ''
+const getPreviewUrl = (client?: Client): string => {
+  const media = getClientMediaCandidates(client)
+  return media.find((url) => !isVideoUrl(url)) || media[0] || ''
 }
 
 const buildGalleryItem = (client: Client): GalleryMediaItem | null => {
+  const media = getClientMediaCandidates(client)
   const previewUrl = getPreviewUrl(client)
-  const hasMedia = previewUrl
-    || client.logo
+  const primaryUrl = media[0] || previewUrl
+  const hasMedia = primaryUrl
+    || previewUrl
     || Boolean(client.mediaCount)
-    || (Array.isArray(client.images) && client.images.length > 0)
 
   if (!hasMedia) {
     return null
@@ -60,10 +65,11 @@ const buildGalleryItem = (client: Client): GalleryMediaItem | null => {
 
   return {
     id: client.id,
-    type: client.previewType || (isVideoUrl(previewUrl) ? 'video' : 'image'),
+    type: isVideoUrl(primaryUrl) ? 'video' : 'image',
     title: client.name || 'Untitled',
     desc: client.description || 'No description available.',
-    url: previewUrl,
+    url: primaryUrl,
+    previewUrl,
     span: 'col-span-1 row-span-1',
     categories: client.categories || [],
     sourceClient: client,
@@ -74,7 +80,30 @@ export function ClientsGallery({ clients, isReady = false }: ClientsGalleryProps
   const [galleryItems, setGalleryItems] = useState<GalleryMediaItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
+  const [shouldRenderGallery, setShouldRenderGallery] = useState(false)
+  const sectionRef = useRef<HTMLElement | null>(null)
   const itemsPerPage = 12
+
+  useEffect(() => {
+    const section = sectionRef.current
+    if (!section || shouldRenderGallery) return undefined
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const isVisible = entries.some((entry) => entry.isIntersecting)
+        if (isVisible) {
+          setShouldRenderGallery(true)
+          observer.disconnect()
+        }
+      },
+      {
+        rootMargin: '300px 0px',
+      }
+    )
+
+    observer.observe(section)
+    return () => observer.disconnect()
+  }, [shouldRenderGallery])
 
   useEffect(() => {
     let cancelled = false
@@ -135,18 +164,21 @@ export function ClientsGallery({ clients, isReady = false }: ClientsGalleryProps
     currentPage * itemsPerPage
   )
 
-  if (isLoading) {
-    return (
-      <section className="w-full bg-[#4a7ba7] py-80 md:py-96 lg:py-[600px] flex justify-center items-center clients-section">
-        <div className="text-white text-xl">Loading gallery...</div>
-      </section>
-    )
-  }
-
   return (
-    <section className="w-full bg-[#4a7ba7] py-16 md:py-20 lg:py-24 flex flex-col justify-center items-center clients-section">
+    <section
+      ref={sectionRef}
+      className="w-full bg-[#4a7ba7] py-16 md:py-20 lg:py-24 flex flex-col justify-center items-center clients-section"
+    >
       <div className="w-full max-w-[1200px] px-8 sm:px-12 md:px-16 lg:px-24 clients-gallery-wrapper">
-        {paginatedItems.length > 0 ? (
+        {!shouldRenderGallery ? (
+          <div className="text-white text-center text-lg md:text-xl py-24">
+            Scroll to load the full gallery.
+          </div>
+        ) : isLoading ? (
+          <div className="text-white text-center text-lg md:text-xl py-24">
+            Loading gallery...
+          </div>
+        ) : paginatedItems.length > 0 ? (
           <InteractiveBentoGallery
             title=""
             description=""

@@ -1,670 +1,665 @@
 "use client"
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react';
+import { Play, X } from 'lucide-react'
 
-
-// MediaItemType defines the structure of a media item
 interface SourceClientType {
-    id: number;
-    name?: string;
-    logo?: string;
-    thumbnailUrl?: string;
-    images?: string[];
-    categories?: string[];
-    description?: string;
+  id: number
+  name?: string
+  logo?: string
+  thumbnailUrl?: string
+  images?: string[]
+  categories?: string[]
+  description?: string
 }
 
 interface MediaItemType {
-    id: number;
-    type: 'image' | 'video';
-    title: string;
-    desc: string;
-    url: string;
-    span: string;
-    categories?: string[];
-    allImages?: string[];
-    sourceClient?: SourceClientType;
+  id: number
+  type: 'image' | 'video'
+  title: string
+  desc: string
+  url: string
+  previewUrl?: string
+  span: string
+  categories?: string[]
+  allImages?: string[]
+  sourceClient?: SourceClientType
 }
+
+type MediaRenderVariant = 'grid' | 'modal' | 'thumb'
 
 const isVideoUrl = (url?: string): boolean => {
-    return !!url && (url.startsWith('data:video/') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov'));
-};
+  return !!url && (
+    url.startsWith('data:video/')
+    || url.endsWith('.mp4')
+    || url.endsWith('.webm')
+    || url.endsWith('.mov')
+  )
+}
 
 const getVideoMimeType = (url?: string): string => {
-    if (!url) return 'video/mp4';
-    if (url.startsWith('data:video/webm')) return 'video/webm';
-    if (url.startsWith('data:video/quicktime') || url.startsWith('data:video/mov')) return 'video/quicktime';
-    if (url.startsWith('data:video/')) return 'video/mp4';
-    if (url.endsWith('.webm')) return 'video/webm';
-    if (url.endsWith('.mov')) return 'video/quicktime';
-    return 'video/mp4';
-};
+  if (!url) return 'video/mp4'
+  if (url.startsWith('data:video/webm')) return 'video/webm'
+  if (url.startsWith('data:video/quicktime') || url.startsWith('data:video/mov')) return 'video/quicktime'
+  if (url.startsWith('data:video/')) return 'video/mp4'
+  if (url.endsWith('.webm')) return 'video/webm'
+  if (url.endsWith('.mov')) return 'video/quicktime'
+  return 'video/mp4'
+}
+
+const uniqueStrings = (values: Array<string | undefined>): string[] => {
+  return Array.from(
+    new Set(values.filter(Boolean).map((value) => String(value).trim()).filter(Boolean))
+  )
+}
 
 const resolveClientImages = (item?: MediaItemType | null): string[] => {
-    if (!item) return [];
+  if (!item) return []
 
-    const directImages = Array.isArray(item.allImages) ? item.allImages : [];
-    if (directImages.length > 0) {
-        return directImages.filter(Boolean);
-    }
+  const directImages = Array.isArray(item.allImages) ? item.allImages : []
+  if (directImages.length > 0) {
+    return uniqueStrings(directImages)
+  }
 
-    const sourceClientImages = Array.isArray(item.sourceClient?.images) ? item.sourceClient?.images : [];
-    const merged = [
-        ...sourceClientImages,
-        ...(item.sourceClient?.logo ? [item.sourceClient.logo] : []),
-        ...(item.sourceClient?.thumbnailUrl ? [item.sourceClient.thumbnailUrl] : []),
-        ...(item.url ? [item.url] : []),
-    ].filter(Boolean) as string[];
-
-    return Array.from(new Set(merged));
-};
-// MediaItem component renders either a video or image based on item.type
-const MediaItem = ({ item, className, onClick, videoRef }: { 
-    item: MediaItemType, 
-    className?: string, 
-    onClick?: () => void,
-    videoRef?: React.RefObject<HTMLVideoElement>
-}) => {
-    const localVideoRef = useRef<HTMLVideoElement>(null); // Reference for video element
-    const videoElementRef = videoRef || localVideoRef; // Use external ref if provided, otherwise use local
-    const [isInView, setIsInView] = useState(false); // To track if video is in the viewport
-    const [isBuffering, setIsBuffering] = useState(true);  // To track if video is buffering
-    const [imgError, setImgError] = useState(false); // Track image load errors
-    const [videoError, setVideoError] = useState(false); // Track video load errors
-
-    // Default background for dark mode
-    const defaultBg = '#1a1a2e';
-
-    // Intersection Observer to detect if video is in view and play/pause accordingly
-    useEffect(() => {
-        if (item.type !== 'video' && !isVideoUrl(item.url)) return;
-
-        const options = {
-            root: null,
-            rootMargin: '50px',
-            threshold: 0.1
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach((entry) => {
-                setIsInView(entry.isIntersecting); // Set isInView to true if the video is in view
-            });
-        }, options);
-
-        if (videoElementRef.current) {
-            observer.observe(videoElementRef.current); // Start observing the video element
-        }
-
-        return () => {
-            if (videoElementRef.current) {
-                observer.unobserve(videoElementRef.current); // Clean up observer when component unmounts
-            }
-        };
-    }, [item.type, item.url]);
-
-    // Handle video play/pause based on whether the video is in view or not
-    useEffect(() => {
-        if (item.type !== 'video' && !isVideoUrl(item.url)) return;
-        if (!isInView) return;
-
-        let mounted = true;
-
-        const handleVideoPlay = async () => {
-            if (!videoElementRef.current || !mounted) return;
-
-            try {
-                if (videoElementRef.current.readyState >= 3) {
-                    setIsBuffering(false);
-                    await videoElementRef.current.play(); // Play the video if it's ready
-                } else {
-                    setIsBuffering(true);
-                    await new Promise((resolve) => {
-                        if (videoElementRef.current) {
-                            videoElementRef.current.oncanplay = resolve; // Wait until the video can start playing
-                        }
-                    });
-                    if (mounted) {
-                        setIsBuffering(false);
-                        await videoElementRef.current.play();
-                    }
-                }
-            } catch (error) {
-                console.warn("Video playback failed:", error);
-            }
-        };
-
-        handleVideoPlay();
-
-        return () => {
-            mounted = false;
-            if (videoElementRef.current) {
-                videoElementRef.current.pause();
-            }
-        };
-    }, [isInView, item.type, item.url]);
-
-    // Determine if this is a video based on type or URL
-    const isVideo = item.type === 'video' || isVideoUrl(item.url);
-
-    // Render video
-    if (isVideo) {
-        if (videoError || !item.url) {
-            return (
-                <div className={`${className} flex items-center justify-center bg-gray-900`}>
-                    <div className="text-gray-500 text-4xl md:text-5xl font-bold">
-                        {item.title?.charAt(0)?.toUpperCase() || '?'}
-                    </div>
-                </div>
-            );
-        }
-
-        return (
-            <div className={`${className} relative overflow-hidden`}>
-                <video
-                    ref={videoElementRef}
-                    className="w-full h-full object-cover"
-                    onClick={onClick}
-                    playsInline
-                    muted
-                    loop
-                    preload={isInView ? 'metadata' : 'none'}
-                    onError={() => {
-                        console.warn('Video failed to load:', item.url?.substring(0, 50));
-                        setVideoError(true);
-                    }}
-                    style={{
-                        opacity: isBuffering ? 0.8 : 1,
-                        transition: 'opacity 0.2s',
-                        transform: 'translateZ(0)',
-                        willChange: 'transform',
-                    }}
-                >
-                    <source src={item.url} type={getVideoMimeType(item.url)} />
-                </video>
-                {isBuffering && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/10">
-                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    </div>
-                )}
-            </div>
-        );
-    }
-
-    // Render image
-    return (
-        <div
-            className={`${className} cursor-pointer`}
-            onClick={onClick}
-            style={{
-                background: item.url?.startsWith('linear-gradient') ? item.url : defaultBg,
-                backgroundColor: item.url?.startsWith('linear-gradient') ? undefined : defaultBg,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-            }}
-        >
-            {imgError || !item.url ? (
-                <div className="text-gray-500 text-4xl md:text-5xl font-bold">
-                    {item.title?.charAt(0)?.toUpperCase() || '?'}
-                </div>
-            ) : (
-                <img
-                    src={item.url}
-                    alt={item.title}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    decoding="async"
-                    onError={() => {
-                        console.warn('Image failed to load:', item.url?.substring(0, 50));
-                        setImgError(true);
-                    }}
-                />
-            )}
-        </div>
-    );
-};
-
-
-
-// GalleryModal component displays the selected media item in a modal
-interface GalleryModalProps {
-    selectedItem: MediaItemType;
-    isOpen: boolean;
-    onClose: () => void;
+  const sourceClientImages = Array.isArray(item.sourceClient?.images) ? item.sourceClient.images : []
+  return uniqueStrings([
+    ...sourceClientImages,
+    item.sourceClient?.logo,
+    item.sourceClient?.thumbnailUrl,
+    item.previewUrl,
+    item.url,
+  ])
 }
-const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
-    const [dockPosition, setDockPosition] = useState({ x: 0, y: 0 });
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const videoRef = useRef<HTMLVideoElement>(null);
 
-    // Get all images for the selected client (from allImages array or single url)
-    const clientImages = resolveClientImages(selectedItem);
+const getDisplayImageUrl = (item?: MediaItemType | null): string => {
+  if (!item) return ''
 
-    useEffect(() => {
-        setCurrentImageIndex(0);
-    }, [selectedItem?.id]);
+  const candidates = uniqueStrings([
+    item.previewUrl,
+    ...resolveClientImages(item),
+    item.url,
+  ])
 
-    if (!isOpen || !selectedItem) return null;
+  return candidates.find((url) => !isVideoUrl(url)) || ''
+}
 
-    const currentImage = clientImages[currentImageIndex];
-    const isCurrentVideo = isVideoUrl(currentImage);
+const attachImagesToItem = (item: MediaItemType, images: string[]): MediaItemType => ({
+  ...item,
+  allImages: images,
+  sourceClient: {
+    ...item.sourceClient,
+    images,
+  },
+})
 
-    const currentItem = {
-        ...selectedItem,
-        url: currentImage,
-        type: isCurrentVideo ? 'video' : 'image'
-    };
+const MediaItem = ({
+  item,
+  className,
+  onClick,
+  variant = 'grid',
+}: {
+  item: MediaItemType
+  className?: string
+  onClick?: () => void
+  variant?: MediaRenderVariant
+}) => {
+  const [imgError, setImgError] = useState(false)
+  const [videoError, setVideoError] = useState(false)
+  const isVideo = item.type === 'video' || isVideoUrl(item.url)
+  const displayImageUrl = getDisplayImageUrl(item)
 
-    // Toggle fullscreen
-    const toggleFullscreen = async () => {
-        const container = document.querySelector('.modal-content-container');
-        try {
-            if (!document.fullscreenElement) {
-                await container?.requestFullscreen();
-                setIsFullscreen(true);
-            } else {
-                await document.exitFullscreen();
-                setIsFullscreen(false);
-            }
-        } catch {
-            // Ignore fullscreen failures and keep the modal usable.
-        }
-    };
+  useEffect(() => {
+    setImgError(false)
+    setVideoError(false)
+  }, [item.url, item.previewUrl, variant])
 
-    // Listen for fullscreen changes
-    useEffect(() => {
-        const handleFullscreenChange = () => {
-            setIsFullscreen(!!document.fullscreenElement);
-        };
-        document.addEventListener('fullscreenchange', handleFullscreenChange);
-        return () => {
-            document.removeEventListener('fullscreenchange', handleFullscreenChange);
-        };
-    }, []);
+  if (isVideo) {
+    if (variant === 'modal') {
+      if (videoError || !item.url) {
+        return (
+          <div className={`${className} flex items-center justify-center bg-gray-950`}>
+            <div className="text-gray-500 text-4xl md:text-5xl font-bold">
+              {item.title?.charAt(0)?.toUpperCase() || '?'}
+            </div>
+          </div>
+        )
+      }
 
-    // Auto-play video when entering fullscreen
-    useEffect(() => {
-        if (isFullscreen && isCurrentVideo && videoRef.current) {
-            videoRef.current.play().catch(() => {});
-        }
-    }, [isFullscreen, isCurrentVideo]);
-
-    const handleNext = () => {
-        setCurrentImageIndex((prev) => (prev + 1) % clientImages.length);
-    };
-
-    const handlePrev = () => {
-        setCurrentImageIndex((prev) => (prev - 1 + clientImages.length) % clientImages.length);
-    };
+      return (
+        <div className={`${className} relative overflow-hidden bg-black`}>
+          <video
+            className="h-full w-full bg-black object-contain"
+            controls
+            playsInline
+            preload="metadata"
+            poster={displayImageUrl || undefined}
+            onError={() => setVideoError(true)}
+          >
+            <source src={item.url} type={getVideoMimeType(item.url)} />
+          </video>
+        </div>
+      )
+    }
 
     return (
-        <>
-            {/* Backdrop overlay - click to close */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+      <div
+        className={`${className} relative cursor-pointer overflow-hidden bg-gray-950`}
+        onClick={onClick}
+      >
+        {displayImageUrl && !imgError ? (
+          <img
+            src={displayImageUrl}
+            alt={item.title}
+            className="h-full w-full object-cover"
+            loading="lazy"
+            decoding="async"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white/80">
+            <div className="px-4 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white/10">
+                <Play className="h-5 w-5 fill-current" />
+              </div>
+              <div className="text-sm font-semibold uppercase tracking-wide">Video</div>
+            </div>
+          </div>
+        )}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="pointer-events-none absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white shadow-lg">
+          <Play className="h-4 w-4 fill-current" />
+        </div>
+      </div>
+    )
+  }
+
+  const imageUrl = displayImageUrl || item.url
+
+  return (
+    <div
+      className={`${className} cursor-pointer`}
+      onClick={onClick}
+      style={{
+        backgroundColor: '#1a1a2e',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+      }}
+    >
+      {imgError || !imageUrl ? (
+        <div className="text-gray-500 text-4xl md:text-5xl font-bold">
+          {item.title?.charAt(0)?.toUpperCase() || '?'}
+        </div>
+      ) : (
+        <img
+          src={imageUrl}
+          alt={item.title}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+          onError={() => setImgError(true)}
+        />
+      )}
+    </div>
+  )
+}
+
+interface GalleryModalProps {
+  selectedItem: MediaItemType
+  isOpen: boolean
+  onClose: () => void
+}
+
+const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const clientImages = resolveClientImages(selectedItem)
+
+  useEffect(() => {
+    setCurrentImageIndex(0)
+  }, [selectedItem?.id])
+
+  useEffect(() => {
+    if (!isOpen) return undefined
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousDocumentOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousDocumentOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onClose])
+
+  useEffect(() => {
+    if (!isOpen || clientImages.length === 0) return undefined
+
+    const preloadTargets = uniqueStrings([
+      clientImages[currentImageIndex],
+      clientImages[currentImageIndex + 1],
+      clientImages[currentImageIndex - 1],
+    ])
+
+    const activePreloads: Array<HTMLImageElement | HTMLVideoElement> = []
+
+    preloadTargets.forEach((url) => {
+      if (!url) return
+
+      if (isVideoUrl(url)) {
+        const video = document.createElement('video')
+        video.preload = 'metadata'
+        video.src = url
+        activePreloads.push(video)
+        return
+      }
+
+      const image = new Image()
+      image.decoding = 'async'
+      image.src = url
+      activePreloads.push(image)
+    })
+
+    return () => {
+      activePreloads.forEach((resource) => {
+        if (resource instanceof HTMLVideoElement) {
+          resource.removeAttribute('src')
+          resource.load()
+        }
+      })
+    }
+  }, [clientImages, currentImageIndex, isOpen])
+
+  if (!isOpen || !selectedItem) return null
+
+  const currentMedia = clientImages[currentImageIndex] || selectedItem.url
+  const currentItem: MediaItemType = {
+    ...selectedItem,
+    url: currentMedia,
+    type: isVideoUrl(currentMedia) ? 'video' : 'image',
+    allImages: clientImages,
+  }
+  const hasMultipleMedia = clientImages.length > 1
+
+  const handleNext = () => {
+    if (!hasMultipleMedia) return
+    setCurrentImageIndex((prev) => (prev + 1) % clientImages.length)
+  }
+
+  const handlePrev = () => {
+    if (!hasMultipleMedia) return
+    setCurrentImageIndex((prev) => (prev - 1 + clientImages.length) % clientImages.length)
+  }
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <motion.div
+        initial={{ scale: 0.97, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.97, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+        className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 md:p-6 pointer-events-none"
+        style={{
+          paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
+          paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+          paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
+        }}
+      >
+        <div
+          className="modal-content-container pointer-events-auto relative flex h-full w-full max-h-full max-w-6xl overflow-hidden rounded-2xl bg-gray-950 shadow-2xl sm:h-[88vh]"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex h-full w-full flex-col bg-gray-950">
+            <div className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-black/75 px-4 py-3 text-white backdrop-blur-md">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-semibold sm:text-lg">
+                  {selectedItem.title}
+                </h3>
+                <p className="truncate text-xs text-white/70 sm:text-sm">
+                  {hasMultipleMedia
+                    ? `${currentImageIndex + 1} of ${clientImages.length}`
+                    : (selectedItem.categories?.join(' • ') || 'Project media')}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="flex shrink-0 items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/20"
                 onClick={onClose}
-            />
-            {/* Main Modal */}
-            <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                transition={{
-                    type: "spring",
-                    stiffness: 400,
-                    damping: 30
-                }}
-                className="fixed inset-0 flex items-center justify-center z-[60] pointer-events-none"
-            >
-                <div
-                    className="modal-content-container w-full min-h-screen sm:h-[90vh] md:h-[600px] backdrop-blur-lg
-                              rounded-none sm:rounded-lg md:rounded-xl overflow-hidden pointer-events-auto"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {/* Main Content */}
-                    <div className="h-full flex flex-col relative">
-                        <div className="flex-1 p-2 sm:p-3 md:p-4 flex items-center justify-center bg-gray-900/80">
-                            <AnimatePresence mode="wait">
-                                <motion.div
-                                    key={currentImageIndex}
-                                    className="relative w-full aspect-[16/9] max-w-[95%] sm:max-w-[85%] md:max-w-3xl
-                                             h-auto max-h-[70vh] rounded-lg overflow-hidden shadow-md"
-                                    initial={{ y: 20, scale: 0.97, opacity: 0 }}
-                                    animate={{
-                                        y: 0,
-                                        scale: 1,
-                                        opacity: 1,
-                                        transition: {
-                                            type: "spring",
-                                            stiffness: 500,
-                                            damping: 30,
-                                            mass: 0.5
-                                        }
-                                    }}
-                                    exit={{
-                                        y: 20,
-                                        scale: 0.97,
-                                        opacity: 0,
-                                        transition: { duration: 0.15 }
-                                    }}
-                                >
-                                    <MediaItem 
-                                        item={currentItem} 
-                                        className="w-full h-full object-contain bg-gray-900/20" 
-                                        onClick={() => {}}
-                                        videoRef={isCurrentVideo ? videoRef : undefined}
-                                    />
-                                    <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 md:p-4
-                                                  bg-gradient-to-t from-black/50 to-transparent">
-                                        <h3 className="text-white text-base sm:text-lg md:text-xl font-semibold">
-                                            {selectedItem.title}
-                                            {clientImages.length > 1 && (
-                                                <span className="text-white/60 text-sm ml-2">
-                                                    ({currentImageIndex + 1} / {clientImages.length})
-                                                </span>
-                                            )}
-                                        </h3>
-                                        <p className="text-white/80 text-xs sm:text-sm mt-1">
-                                            {selectedItem.desc}
-                                        </p>
-                                    </div>
-                                    {/* Fullscreen button for videos */}
-                                    {isCurrentVideo && (
-                                        <button
-                                            onClick={toggleFullscreen}
-                                            className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white
-                                                     hover:bg-black/70 transition-colors z-30"
-                                            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                                        >
-                                            {isFullscreen ? (
-                                                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-                                                </svg>
-                                            ) : (
-                                                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m4-4l-5 5m11-5v-4m0 4h-4m4 0l-5-5" />
-                                                </svg>
-                                            )}
-                                        </button>
-                                    )}
-                                </motion.div>
-                            </AnimatePresence>
-                        </div>
+                aria-label="Close gallery"
+              >
+                <X className="h-4 w-4" />
+                <span>Close</span>
+              </button>
+            </div>
 
-                        {/* Navigation Arrows for multiple images */}
-                        {clientImages.length > 1 && (
-                            <>
-                                <button
-                                    onClick={handlePrev}
-                                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-2 rounded-full
-                                             bg-black/50 text-white hover:bg-black/70 transition-colors z-20"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                </button>
-                                <button
-                                    onClick={handleNext}
-                                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-2 rounded-full
-                                             bg-black/50 text-white hover:bg-black/70 transition-colors z-20"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                    </svg>
-                                </button>
-                            </>
-                        )}
-                    </div>
-
-                    {/* Close Button - positioned at top right of modal */}
-                    <motion.button
-                        className="absolute top-4 right-4
-                                  p-2 rounded-full bg-gray-800 text-white hover:bg-gray-700
-                                  text-sm backdrop-blur-md shadow-lg z-40"
-                        onClick={onClose}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                    >
-                        <X className='w-5 h-5' />
-                    </motion.button>
-                </div>
-            </motion.div>
-
-            {/* Draggable Dock - Show thumbnails of all client images */}
-            <motion.div
-                drag
-                dragMomentum={false}
-                dragElastic={0.1}
-                initial={false}
-                animate={{ x: dockPosition.x, y: dockPosition.y }}
-                onDragEnd={(_, info) => {
-                    setDockPosition(prev => ({
-                        x: prev.x + info.offset.x,
-                        y: prev.y + info.offset.y
-                    }));
-                }}
-                className="fixed z-[70] left-1/2 bottom-4 -translate-x-1/2 touch-none"
-            >
+            <div className="flex min-h-0 flex-1 items-center justify-center bg-gray-900/85 px-3 py-3 sm:px-4 md:px-6">
+              <AnimatePresence mode="wait">
                 <motion.div
-                    className="relative rounded-xl bg-sky-400/20 backdrop-blur-xl
-                             border border-blue-400/30 shadow-lg
-                             cursor-grab active:cursor-grabbing"
+                  key={`${selectedItem.id}-${currentImageIndex}`}
+                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-black shadow-xl"
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 20, opacity: 0 }}
                 >
-                    <div className="flex items-center -space-x-2 px-3 py-2">
-                        {clientImages.map((imgUrl, index) => {
-                            const thumbItem = { ...selectedItem, url: imgUrl, type: isVideoUrl(imgUrl) ? 'video' : 'image' };
-                            return (
-                                <motion.div
-                                    key={index}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setCurrentImageIndex(index);
-                                    }}
-                                    style={{
-                                        zIndex: currentImageIndex === index ? 30 : clientImages.length - index,
-                                    }}
-                                    className={`
-                                        relative group
-                                        w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex-shrink-0
-                                        rounded-lg overflow-hidden
-                                        cursor-pointer hover:z-20
-                                        ${currentImageIndex === index
-                                            ? 'ring-2 ring-white/70 shadow-lg'
-                                            : 'hover:ring-2 hover:ring-white/30'}
-                                    `}
-                                    initial={{ rotate: index % 2 === 0 ? -15 : 15 }}
-                                    animate={{
-                                        scale: currentImageIndex === index ? 1.2 : 1,
-                                        rotate: currentImageIndex === index ? 0 : index % 2 === 0 ? -15 : 15,
-                                        y: currentImageIndex === index ? -8 : 0,
-                                    }}
-                                    whileHover={{
-                                        scale: 1.3,
-                                        rotate: 0,
-                                        y: -10,
-                                        transition: { type: "spring", stiffness: 400, damping: 25 }
-                                    }}
-                                >
-                                    <MediaItem item={thumbItem} className="w-full h-full" onClick={() => setCurrentImageIndex(index)} />
-                                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-white/20" />
-                                    {currentImageIndex === index && (
-                                        <motion.div
-                                            layoutId="activeGlow"
-                                            className="absolute -inset-2 bg-white/20 blur-xl"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            transition={{ duration: 0.2 }}
-                                        />
-                                    )}
-                                </motion.div>
-                            )
-                        })}
-                    </div>
+                  <MediaItem
+                    item={currentItem}
+                    className="h-full w-full bg-black"
+                    variant="modal"
+                  />
+
+                  {hasMultipleMedia && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handlePrev}
+                        className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white transition-colors hover:bg-black/80 sm:left-4"
+                        aria-label="Previous media"
+                      >
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNext}
+                        className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white transition-colors hover:bg-black/80 sm:right-4"
+                        aria-label="Next media"
+                      >
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
                 </motion.div>
-            </motion.div>
-        </>
-    );
-};
+              </AnimatePresence>
+            </div>
 
+            <div className="border-t border-white/10 bg-black/80 px-4 py-3 text-white">
+              <p className="text-sm text-white/80 sm:text-base">
+                {selectedItem.desc}
+              </p>
 
+              {hasMultipleMedia && (
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                  {clientImages.map((mediaUrl, index) => {
+                    const thumbItem: MediaItemType = {
+                      ...selectedItem,
+                      url: mediaUrl,
+                      previewUrl: selectedItem.previewUrl,
+                      type: isVideoUrl(mediaUrl) ? 'video' : 'image',
+                      allImages: clientImages,
+                    }
+
+                    return (
+                      <motion.button
+                        key={`${selectedItem.id}-${index}`}
+                        type="button"
+                        onClick={() => setCurrentImageIndex(index)}
+                        className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border transition-all ${
+                          currentImageIndex === index
+                            ? 'border-white/80 ring-2 ring-white/50'
+                            : 'border-white/10 hover:border-white/40'
+                        }`}
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.98 }}
+                        aria-label={`Open media ${index + 1}`}
+                      >
+                        <MediaItem
+                          item={thumbItem}
+                          className="h-full w-full"
+                          variant="thumb"
+                        />
+                      </motion.button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  )
+}
 
 interface InteractiveBentoGalleryProps {
-    mediaItems: MediaItemType[]
-    title: string
-    description: string
-    showTitle?: boolean
+  mediaItems: MediaItemType[]
+  title: string
+  description: string
+  showTitle?: boolean
 }
 
-const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({ mediaItems, title, description, showTitle = true }) => {
-    const [selectedItem, setSelectedItem] = useState<MediaItemType | null>(null);
-    const items = mediaItems;
+const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({
+  mediaItems,
+  title,
+  description,
+  showTitle = true,
+}) => {
+  const [selectedItem, setSelectedItem] = useState<MediaItemType | null>(null)
+  const cachedMediaRef = useRef<Record<number, string[]>>({})
+  const modalHistoryEntryRef = useRef(false)
+  const items = mediaItems
 
-    useEffect(() => {
-        let cancelled = false;
+  const fetchClientMedia = useCallback(async (item: MediaItemType): Promise<string[]> => {
+    if (!item?.id) return []
 
-        const loadSelectedMedia = async () => {
-            if (!selectedItem) return;
+    const cached = cachedMediaRef.current[item.id]
+    if (Array.isArray(cached) && cached.length > 0) {
+      return cached
+    }
 
-            const existingImages = Array.isArray(selectedItem.allImages)
-                ? selectedItem.allImages
-                : Array.isArray(selectedItem.sourceClient?.images)
-                    ? selectedItem.sourceClient.images
-                    : [];
+    const existingImages = Array.isArray(item.allImages) && item.allImages.length > 0
+      ? item.allImages
+      : Array.isArray(item.sourceClient?.images) && item.sourceClient.images.length > 0
+        ? item.sourceClient.images
+        : []
 
-            if (existingImages.length > 0) return;
+    if (existingImages.length > 0) {
+      cachedMediaRef.current[item.id] = existingImages
+      return existingImages
+    }
 
-            try {
-                const response = await fetch(`/api/clients/${selectedItem.id}/media`);
-                if (!response.ok) return;
+    const response = await fetch(`/api/clients/${item.id}/media`)
+    if (!response.ok) {
+      throw new Error(`Failed to load media for client ${item.id}`)
+    }
 
-                const payload = await response.json();
-                const images = Array.isArray(payload.images)
-                    ? payload.images
-                    : Array.isArray(payload.media)
-                        ? payload.media.map((item: { url?: string }) => item.url).filter(Boolean)
-                        : [];
+    const payload = await response.json()
+    const images = Array.isArray(payload.images)
+      ? payload.images
+      : Array.isArray(payload.media)
+        ? payload.media.map((entry: { url?: string }) => entry.url).filter(Boolean)
+        : []
 
-                if (cancelled || images.length === 0) return;
+    if (images.length > 0) {
+      cachedMediaRef.current[item.id] = images
+    }
 
-                setSelectedItem((current) => {
-                    if (!current || current.id !== selectedItem.id) {
-                        return current;
-                    }
+    return images
+  }, [])
 
-                    return {
-                        ...current,
-                        allImages: images,
-                        sourceClient: {
-                            ...current.sourceClient,
-                            images,
-                        },
-                    };
-                });
-            } catch {
-                // Keep the modal usable with the preview item if the media request fails.
-            }
-        };
+  const prefetchClientMedia = useCallback((item: MediaItemType) => {
+    void fetchClientMedia(item).catch(() => {
+      // Keep previews lightweight even if the background metadata fetch fails.
+    })
+  }, [fetchClientMedia])
 
-        loadSelectedMedia();
+  const openSelectedItem = useCallback((item: MediaItemType) => {
+    const cachedImages = cachedMediaRef.current[item.id]
+    setSelectedItem(cachedImages?.length ? attachImagesToItem(item, cachedImages) : item)
+    prefetchClientMedia(item)
+  }, [prefetchClientMedia])
 
-        return () => {
-            cancelled = true;
-        };
-    }, [selectedItem]);
+  useEffect(() => {
+    if (!selectedItem) return undefined
 
-    return (
-        <div className="w-full">
-            {/* Keep spacing even when title is hidden */}
-            <div className={showTitle ? "pt-12 md:pt-16 lg:pt-20 pb-20 md:pb-28 lg:pb-32 text-center" : "pt-8 pb-8"}>
-                {showTitle && (
-                    <>
-                        <motion.h1
-                            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 md:mb-8"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5 }}
-                        >
-                            {title}
-                        </motion.h1>
-                        <motion.p
-                            className="mt-4 md:mt-6 text-base sm:text-lg md:text-xl text-white/90 max-w-2xl mx-auto px-4"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: 0.1 }}
-                        >
-                            {description}
-                        </motion.p>
-                    </>
-                )}
-            </div>
-            <AnimatePresence mode="wait">
-                {selectedItem ? (
-                    <GalleryModal
-                        selectedItem={selectedItem}
-                        isOpen={true}
-                        onClose={() => setSelectedItem(null)}
-                    />
-                ) : (
-                    <motion.div
-                        className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5 lg:gap-6 auto-rows-[200px] sm:auto-rows-[240px] md:auto-rows-[280px] w-full mx-auto px-8 md:px-16 lg:px-24"
-                        initial="hidden"
-                        animate="visible"
-                        exit="hidden"
-                        variants={{
-                            hidden: { opacity: 0 },
-                            visible: {
-                                opacity: 1,
-                                transition: { staggerChildren: 0.1 }
-                            }
-                        }}
-                    >
-                        {items.map((item, index) => (
-                            <motion.div
-                                key={item.id}
-                                className={`relative overflow-hidden rounded-xl cursor-pointer ${item.span}`}
-                                onClick={() => setSelectedItem(item)}
-                                variants={{
-                                    hidden: { y: 50, scale: 0.9, opacity: 0 },
-                                    visible: {
-                                        y: 0,
-                                        scale: 1,
-                                        opacity: 1,
-                                        transition: {
-                                            type: "spring",
-                                            stiffness: 350,
-                                            damping: 25,
-                                            delay: index * 0.05
-                                        }
-                                    }
-                                }}
-                                whileHover={{ scale: 1.02 }}
-                            >
-                                <MediaItem
-                                    item={item}
-                                    className="absolute inset-0 w-full h-full"
-                                    onClick={() => setSelectedItem(item)}
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300">
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <h3 className="text-white text-lg md:text-xl lg:text-2xl font-bold text-center px-4 leading-tight">
-                                            {item.title}
-                                        </h3>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-};
+    let cancelled = false
 
+    fetchClientMedia(selectedItem)
+      .then((images) => {
+        if (cancelled || images.length === 0) return
+
+        setSelectedItem((current) => {
+          if (!current || current.id !== selectedItem.id) {
+            return current
+          }
+
+          return attachImagesToItem(current, images)
+        })
+      })
+      .catch(() => {
+        // Keep the modal usable with the preview item if the media request fails.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [fetchClientMedia, selectedItem])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !selectedItem || modalHistoryEntryRef.current) {
+      return undefined
+    }
+
+    const handlePopState = () => {
+      modalHistoryEntryRef.current = false
+      setSelectedItem(null)
+    }
+
+    window.history.pushState({ ...(window.history.state || {}), galleryModal: true }, '', window.location.href)
+    modalHistoryEntryRef.current = true
+    window.addEventListener('popstate', handlePopState)
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [selectedItem?.id])
+
+  useEffect(() => {
+    if (!selectedItem) {
+      modalHistoryEntryRef.current = false
+    }
+  }, [selectedItem])
+
+  const closeSelectedItem = useCallback(() => {
+    setSelectedItem(null)
+
+    if (typeof window !== 'undefined' && modalHistoryEntryRef.current) {
+      modalHistoryEntryRef.current = false
+      if (window.history.state?.galleryModal) {
+        window.history.back()
+      }
+    }
+  }, [])
+
+  return (
+    <div className="w-full">
+      <div className={showTitle ? "pb-20 pt-12 text-center md:pb-28 md:pt-16 lg:pb-32 lg:pt-20" : "pb-8 pt-8"}>
+        {showTitle && (
+          <>
+            <motion.h1
+              className="mb-6 text-3xl font-bold text-white sm:text-4xl md:mb-8 md:text-5xl lg:text-6xl"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              {title}
+            </motion.h1>
+            <motion.p
+              className="mx-auto mt-4 max-w-2xl px-4 text-base text-white/90 sm:text-lg md:mt-6 md:text-xl"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              {description}
+            </motion.p>
+          </>
+        )}
+      </div>
+
+      <AnimatePresence mode="wait">
+        {selectedItem ? (
+          <GalleryModal
+            selectedItem={selectedItem}
+            isOpen={true}
+            onClose={closeSelectedItem}
+          />
+        ) : (
+          <motion.div
+            className="mx-auto grid w-full auto-rows-[200px] grid-cols-2 gap-4 px-8 sm:grid-cols-3 sm:auto-rows-[240px] sm:px-12 md:grid-cols-4 md:auto-rows-[280px] md:px-16 lg:grid-cols-5 lg:gap-6 lg:px-24"
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={{
+              hidden: { opacity: 0 },
+              visible: {
+                opacity: 1,
+                transition: { staggerChildren: 0.1 },
+              },
+            }}
+          >
+            {items.map((item, index) => (
+              <motion.div
+                key={item.id}
+                className={`relative cursor-pointer overflow-hidden rounded-xl ${item.span}`}
+                onClick={() => openSelectedItem(item)}
+                onMouseEnter={() => prefetchClientMedia(item)}
+                onFocus={() => prefetchClientMedia(item)}
+                variants={{
+                  hidden: { y: 50, scale: 0.9, opacity: 0 },
+                  visible: {
+                    y: 0,
+                    scale: 1,
+                    opacity: 1,
+                    transition: {
+                      type: 'spring',
+                      stiffness: 350,
+                      damping: 25,
+                      delay: index * 0.05,
+                    },
+                  },
+                }}
+                whileHover={{ scale: 1.02 }}
+              >
+                <MediaItem
+                  item={item}
+                  className="absolute inset-0 h-full w-full"
+                  variant="grid"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent opacity-0 transition-opacity duration-300 hover:opacity-100">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <h3 className="px-4 text-center text-lg font-bold leading-tight text-white md:text-xl lg:text-2xl">
+                      {item.title}
+                    </h3>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
 
 export default InteractiveBentoGallery

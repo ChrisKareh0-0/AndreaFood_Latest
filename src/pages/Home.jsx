@@ -5,10 +5,31 @@ import { loadSiteText } from '@/content/siteText'
 import { loadLatestWorkPosts } from '@/content/latestWork'
 import { Filter, Instagram, Facebook, Mail, Phone } from 'lucide-react'
 
+const mergeSiteText = (incoming) => {
+  const defaults = loadSiteText()
+
+  if (!incoming || typeof incoming !== 'object') {
+    return defaults
+  }
+
+  return {
+    ...defaults,
+    ...incoming,
+    home: {
+      ...defaults.home,
+      ...(incoming.home || {}),
+    },
+    footer: {
+      ...defaults.footer,
+      ...(incoming.footer || {}),
+    },
+  }
+}
+
 function Home() {
   const [personalData, setPersonalData] = useState(null)
   const [bioContent, setBioContent] = useState(null)
-  const [siteText, setSiteText] = useState(() => loadSiteText())
+  const [siteText, setSiteText] = useState(() => mergeSiteText())
   const [latestWorkPosts, setLatestWorkPosts] = useState(() => loadLatestWorkPosts())
   const [clients, setClients] = useState([])
   const [clientsLoaded, setClientsLoaded] = useState(false)
@@ -19,6 +40,22 @@ function Home() {
   const itemsPerPage = 12
 
   const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
+
+  const isVideoUrl = (url) => typeof url === 'string' && (
+    url.startsWith('data:video/')
+    || url.endsWith('.mp4')
+    || url.endsWith('.webm')
+    || url.endsWith('.mov')
+  )
+
+  const getClientCardImage = (client) => {
+    const candidates = [
+      client?.logo,
+      client?.thumbnailUrl,
+      ...(Array.isArray(client?.images) ? client.images : []),
+    ].filter(Boolean)
+    return candidates.find((url) => !isVideoUrl(url)) || ''
+  }
 
   const filteredClients = clients.filter(client => {
     const matchesCategory = activeFilter === 'All' || (client.categories && client.categories.includes(activeFilter));
@@ -49,7 +86,7 @@ function Home() {
         const data = await res.json()
         setPersonalData(data?.personalData || null)
         setBioContent(data?.bioContent || null)
-        setSiteText(data?.siteText || loadSiteText())
+        setSiteText(mergeSiteText(data?.siteText))
         setLatestWorkPosts(Array.isArray(data?.latestWorkPosts) ? data.latestWorkPosts : loadLatestWorkPosts())
         setClients(Array.isArray(data?.clients) ? data.clients : [])
       } catch (err) {
@@ -227,8 +264,8 @@ function Home() {
               paginatedClients.map((client) => (
                 <div key={client.id} className="work-card-item">
                   <div className="work-card-logo">
-                    {(client.logo || client.thumbnailUrl) ? (
-                      <img src={client.logo || client.thumbnailUrl} alt={client.name || 'Client'} className="client-logo-img" loading="lazy" decoding="async" />
+                    {getClientCardImage(client) ? (
+                      <img src={getClientCardImage(client)} alt={client.name || 'Client'} className="client-logo-img" loading="lazy" decoding="async" />
                     ) : (
                       <div className="logo-circle">{typeof client.name === 'string' && client.name.length > 0 ? client.name.charAt(0) : '?'}</div>
                     )}
