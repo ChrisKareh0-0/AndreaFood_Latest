@@ -1,5 +1,5 @@
 "use client"
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, X } from 'lucide-react'
 import { buildMediaPreviewUrl, isVideoUrl } from '@/lib/mediaPreview'
@@ -267,7 +267,19 @@ interface GalleryModalProps {
 
 const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const clientImages = resolveClientImages(selectedItem)
+  const clientImages = useMemo(
+    () => resolveClientImages(selectedItem),
+    [
+      selectedItem?.id,
+      selectedItem?.url,
+      selectedItem?.previewUrl,
+      selectedItem?.sourceClient?.id,
+      selectedItem?.sourceClient?.logo,
+      selectedItem?.sourceClient?.thumbnailUrl,
+      Array.isArray(selectedItem?.allImages) ? selectedItem.allImages.join('|') : '',
+      Array.isArray(selectedItem?.sourceClient?.images) ? selectedItem.sourceClient.images.join('|') : '',
+    ]
+  )
 
   useEffect(() => {
     const selectedIndex = clientImages.findIndex((url) => url === selectedItem?.url)
