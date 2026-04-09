@@ -277,6 +277,24 @@ function mediaUrl(url) {
   return `${mediaBaseUrl}${value.startsWith('/') ? '' : '/'}${value}`;
 }
 
+function previewFallbackUrl(sourceUrl) {
+  const value = text(sourceUrl);
+  if (!value || value.startsWith('data:')) return '';
+
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      return parsed.pathname.startsWith('/clients/') ? parsed.toString() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  if (!value.startsWith('/clients/')) return '';
+  if (!mediaBaseUrl) return '';
+  return `${mediaBaseUrl}${value}`;
+}
+
 function parseJson(value, fallback = null) {
   if (value == null) return fallback;
   try {
@@ -1050,6 +1068,10 @@ app.get('/api/media/preview', async (req, res) => {
     });
 
     if (!preview) {
+      const fallbackUrl = previewFallbackUrl(req.query.src);
+      if (fallbackUrl) {
+        return res.redirect(302, fallbackUrl);
+      }
       return res.status(404).json({ error: 'Preview source not found' });
     }
 
