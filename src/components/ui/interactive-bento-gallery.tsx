@@ -181,6 +181,34 @@ const MediaItem = ({
             decoding="async"
             onError={() => setImgError(true)}
           />
+        ) : !videoError && item.url ? (
+          <video
+            className="h-full w-full object-cover"
+            muted
+            playsInline
+            preload="metadata"
+            poster={videoPosterUrl || undefined}
+            aria-hidden="true"
+            tabIndex={-1}
+            onLoadedMetadata={(event) => {
+              const video = event.currentTarget
+              video.pause()
+
+              try {
+                if (Number.isFinite(video.duration) && video.duration > 0.2) {
+                  video.currentTime = 0.1
+                }
+              } catch {
+                // Some browsers block programmatic seeking for unloaded metadata.
+              }
+            }}
+            onLoadedData={(event) => {
+              event.currentTarget.pause()
+            }}
+            onError={() => setVideoError(true)}
+          >
+            <source src={item.url} type={getVideoMimeType(item.url)} />
+          </video>
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white/80">
             <div className="px-4 text-center">
