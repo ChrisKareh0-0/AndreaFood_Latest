@@ -36,6 +36,13 @@ function Navigation() {
   return (
     <nav className="navigation">
       <div className="nav-container">
+        <Link
+          to="/admin"
+          className={`login-btn-floating ${location.pathname === '/login' || location.pathname.startsWith('/admin') ? 'active' : ''}`}
+        >
+          {siteText.navigation.login || 'Admin'}
+        </Link>
+
         <ul className="nav-menu">
           {navItems.map((item, index) => (
             <li key={index} className="nav-item">
@@ -68,8 +75,6 @@ function Navigation() {
         >
           {isDark ? <Sun size={20} /> : <Moon size={20} />}
         </button>
-
-        {/* Login button hidden as requested */}
 
         <div className="mobile-menu-icon">
           <span></span>

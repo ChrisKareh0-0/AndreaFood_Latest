@@ -9,12 +9,20 @@ function Login() {
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const siteText = loadSiteText()
+  const validCredentials = [
+    { username: 'Chris', password: 'ashenone' },
+    { username: 'admin', password: 'admin123' },
+  ]
 
   const handleSubmit = (e) => {
     e.preventDefault()
 
+    const isValid = validCredentials.some(
+      (credentials) => credentials.username === username && credentials.password === password
+    )
+
     // Simple authentication - in production, this should be handled by a backend
-    if (username === 'Chris' && password === 'ashenone') {
+    if (isValid) {
       localStorage.setItem('isAuthenticated', 'true')
       navigate('/admin')
     } else {

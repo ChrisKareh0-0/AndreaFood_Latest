@@ -146,7 +146,7 @@ export const defaultSiteText: SiteText = {
 
     submitLabel: 'Login to Dashboard',
     invalidCredentials: 'Invalid credentials',
-    defaultCredentialsNote: 'Default credentials: admin / admin123'
+    defaultCredentialsNote: 'Default credentials: admin / admin123 or Chris / ashenone'
   }
 }
 
