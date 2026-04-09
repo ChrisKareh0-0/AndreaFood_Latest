@@ -59,7 +59,6 @@ const resolveClientImages = (item?: MediaItemType | null): string[] => {
     ...sourceClientImages,
     item.sourceClient?.logo,
     item.sourceClient?.thumbnailUrl,
-    item.previewUrl,
     item.url,
   ])
 }
@@ -81,7 +80,6 @@ const getDisplayImageUrl = (item?: MediaItemType | null, variant: MediaRenderVar
     const modalCandidates = uniqueStrings([
       ...resolveClientImages(item),
       item?.url,
-      item?.previewUrl,
     ])
 
     return modalCandidates.find((url) => !isVideoUrl(url)) || ''
@@ -154,7 +152,7 @@ const MediaItem = ({
       return (
         <div className={`${className} relative overflow-hidden bg-black`}>
           <video
-            className="h-full w-full bg-black object-contain"
+            className="block h-auto max-h-full w-auto max-w-full bg-black object-contain"
             controls
             playsInline
             preload="metadata"
@@ -379,8 +377,22 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
           paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
         }}
       >
+        <button
+          type="button"
+          className="pointer-events-auto fixed right-3 top-3 z-[70] flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-black/85"
+          style={{
+            top: 'max(0.75rem, env(safe-area-inset-top))',
+            right: 'max(0.75rem, env(safe-area-inset-right))',
+          }}
+          onClick={onClose}
+          aria-label="Close gallery"
+        >
+          <X className="h-4 w-4" />
+          <span>Close</span>
+        </button>
+
         <div
-          className="modal-content-container pointer-events-auto relative mt-1 flex h-[min(94dvh,940px)] w-full max-w-6xl overflow-hidden rounded-2xl bg-gray-950 shadow-2xl sm:h-[min(90dvh,940px)]"
+          className="modal-content-container pointer-events-auto relative mt-1 flex h-[90vh] w-full max-w-6xl max-h-[940px] overflow-hidden rounded-2xl bg-gray-950 shadow-2xl sm:h-[88vh]"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex h-full w-full flex-col bg-gray-950">
@@ -546,12 +558,13 @@ const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({
       : Array.isArray(payload.media)
         ? payload.media.map((entry: { url?: string }) => entry.url).filter(Boolean)
         : []
+    const dedupedImages = uniqueStrings(images)
 
-    if (images.length > 0) {
-      cachedMediaRef.current[item.id] = images
+    if (dedupedImages.length > 0) {
+      cachedMediaRef.current[item.id] = dedupedImages
     }
 
-    return images
+    return dedupedImages
   }, [])
 
   const openSelectedItem = useCallback((item: MediaItemType) => {

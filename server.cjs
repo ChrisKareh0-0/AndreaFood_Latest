@@ -1272,6 +1272,21 @@ app.get('/api/clients/:id', async (req, res) => {
 });
 
 app.get('/api/clients/:id/media', async (req, res) => {
+  const dedupeMediaItems = (items) => {
+    const seen = new Set();
+    const list = Array.isArray(items) ? items : [];
+    const result = [];
+
+    for (const item of list) {
+      const url = text(item?.url);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      result.push(item);
+    }
+
+    return result;
+  };
+
   if (canUseLocalContentFallback()) {
     const clientId = Number(req.params.id);
     if (!Number.isSafeInteger(clientId)) {
@@ -1280,9 +1295,14 @@ app.get('/api/clients/:id/media', async (req, res) => {
 
     const client = getLocalClientById(clientId, true);
     if (!client) return res.status(404).json({ error: 'Client not found' });
+    const uniqueMedia = dedupeMediaItems(client.media);
+    const uniqueImages = uniqueStrings(uniqueMedia.map((entry) => entry?.url));
+
     const response = {
       clientId,
-      media: Array.isArray(client.media) ? client.media : [],
+      media: uniqueMedia,
+      images: uniqueImages,
+      count: uniqueMedia.length,
       source: 'local-fallback',
     };
     setApiCache(res, 30);
@@ -1307,11 +1327,17 @@ app.get('/api/clients/:id/media', async (req, res) => {
     const client = await getClientById(clientId, true);
     if (!client) return res.status(404).json({ error: 'Client not found' });
 
+    const uniqueMedia = dedupeMediaItems(client.media || []);
+    const uniqueImages = uniqueStrings([
+      ...(Array.isArray(client.images) ? client.images : []),
+      ...uniqueMedia.map((entry) => entry?.url),
+    ]);
+
     const response = {
       clientId,
-      media: client.media || [],
-      images: client.images || [],
-      count: Number(client.mediaCount || 0),
+      media: uniqueMedia,
+      images: uniqueImages,
+      count: uniqueMedia.length,
       source: 'database',
     };
 
