@@ -8,7 +8,13 @@
     "dev:all": "concurrently \"node server.cjs\" \"npm run dev\"",
     "build": "vite build",
     "lint": "eslint .",
+    "data:extract-inline": "node extract-inline-site-media.cjs",
+    "data:sync": "node sync-clients-from-local-store.cjs",
     "preview": "vite preview",
+    "media:import": "node bulk-import-media.cjs",
+    "media:import:dry": "node bulk-import-media.cjs --dry-run",
+    "media:upload": "node upload-to-railway.cjs",
+    "media:upload:dry": "node upload-to-railway.cjs --dry-run",
     "start": "node server.cjs",
     "start:prod": "npm run build && npm start"
   },

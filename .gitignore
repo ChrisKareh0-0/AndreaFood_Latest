@@ -32,3 +32,13 @@ dist-ssr
 public/clients/*
 !public/.gitkeep
 !public/clients/.gitkeep
+!public/clients/site-content/
+!public/clients/site-content/**
+.npm-cache/
+.server-*.pid
+.server-*.log
+media-import-report.json
+media-upload-report.json
+upload-to-railway-report.json
+media-source/**
+!media-source/.gitkeep

@@ -1,141 +1,89 @@
-# Railway Media Upload Guide
+# Railway Media Upload
 
-## Overview
-This script uploads your 25GB of media files to Railway Volume Storage and stores only the URLs in the database.
+This repo uses Railway Postgres for media metadata and a Railway Volume for the actual image and video files.
 
-## Setup (Already Done ✅)
-1. Installed `multer` for file uploads
-2. Added `/clients` static route to serve files
-3. Created upload API endpoints
-4. Created upload script
+Production media should stay as relative paths like `/clients/al-baker/A71I0016.jpg` in the database.
+The corresponding files should live in the Railway volume mounted at `/app/media`.
 
-## How It Works
+## Production Setup
 
-### Local Development
-```bash
-# 1. Start the server
-node server.cjs
+- Volume mount path: `/app/media`
+- App environment variable: `MEDIA_STORAGE_PATH=/app/media`
+- Upload endpoint: `POST /api/media/upload`
+- Public media route: `/clients/*`
 
-# 2. Run the upload script
-node upload-to-railway.cjs
-```
+With that setup, anything uploaded through the app lands in the Railway volume and is immediately served back from the same `/clients/...` URL already stored in Postgres.
 
-The script will:
-- Scan `/Users/chris/dev/For Chris/Web Materials`
-- Match folders to clients in database
-- Upload files to `/public/clients/[client-name]/`
-- Store URLs in database (e.g., `/clients/al-massoud/image1.jpg`)
+## Media Machine Flow
 
-### Deploying to Railway
-
-When you deploy to Railway, the files in `/public/clients/` will be deployed with your app.
-
-**IMPORTANT**: For 25GB of files, you have two options:
-
-#### Option A: Deploy Files with Code (Recommended for < 5GB)
-```bash
-# Files are already in /public/clients/
-# Just commit and deploy
-git add public/clients/
-git commit -m "Add client media files"
-git push
-```
-
-Railway will deploy everything together.
-
-#### Option B: Upload Files Separately to Railway Volume (For 25GB)
-
-1. **Add a Volume in Railway Dashboard**:
-   - Go to your Railway project
-   - Click "Volumes" → "New Volume"
-   - Mount path: `/app/public/clients`
-   - Size: 30GB or more
-
-2. **Upload Files via SSH** (Railway provides SSH access):
-   ```bash
-   # Railway will give you SSH credentials
-   # Then upload files:
-   scp -r "/Users/chris/dev/For Chris/Web Materials/"* user@railway.app:/app/public/clients/
-   ```
-
-3. **Or use rsync**:
-   ```bash
-   rsync -avz "/Users/chris/dev/For Chris/Web Materials/" user@railway.app:/app/public/clients/
-   ```
-
-## File Structure
-
-```
-/app/
-├── public/
-│   └── clients/
-│       ├── al-abdallah/
-│       │   ├── image1.jpg
-│       │   └── image2.jpg
-│       ├── al-baker/
-│       │   └── photo.jpg
-│       └── ...
-├── server.cjs
-└── upload-to-railway.cjs
-```
-
-## URLs
-
-Files are served from:
-- `/clients/[client-folder]/[filename]`
-
-Examples:
-- `http://localhost:8080/clients/al-massoud/image1.jpg`
-- `http://your-railway.app/clients/burger-king/video1.mp4`
-
-## Database Storage
-
-The database stores only URLs (not base64 data):
-```json
-{
-  "id": 123,
-  "name": "Al Massoud",
-  "images": [
-    "/clients/al-massoud/image1.jpg",
-    "/clients/al-massoud/image2.jpg"
-  ],
-  "categories": ["Commercial"]
-}
-```
-
-## Running the Upload Script
+Clone the repo on the machine that has the raw media library, then run:
 
 ```bash
-cd /Users/chris/dev/Andrea/andrea-portfolio
-node upload-to-railway.cjs
+npm ci
 ```
 
-The script will:
-1. ✅ Match folders to clients
-2. ✅ Upload files to `/public/clients/[client-name]/`
-3. ✅ Update database with URLs
-4. ✅ Show progress and summary
+If Railway Postgres ever needs to be rebuilt from the checked-in manifest, sync the metadata first:
 
-## Troubleshooting
+```bash
+DATABASE_URL="your_railway_database_url" npm run data:sync
+```
 
-### Files not uploading?
-- Check server is running: `curl http://localhost:8080/api/clients`
-- Check folder permissions: `ls -la public/clients/`
+Dry-run the media matcher before uploading:
 
-### Files not showing?
-- Check database has URLs: Visit Database Viewer in admin
-- Check files exist: `ls public/clients/[client-name]/`
+```bash
+API_BASE="https://andreafoodstyle.com" \
+MEDIA_SOURCE_PATH="/Users/chris/dev/For Chris" \
+MEDIA_UPLOAD_CONCURRENCY=1 \
+npm run media:upload:dry
+```
 
-### Railway deployment issues?
-- Ensure Volume is mounted at `/app/public/clients`
-- Check Railway logs for errors
-- Verify files uploaded: SSH into Railway instance
+If your real client folders are nested deeper, point `MEDIA_SOURCE_PATH` at that deeper folder instead:
 
-## Cost Estimate
+```bash
+API_BASE="https://andreafoodstyle.com" \
+MEDIA_SOURCE_PATH="/Users/chris/dev/For Chris/Web Materials" \
+MEDIA_UPLOAD_CONCURRENCY=1 \
+npm run media:upload:dry
+```
 
-Railway Volume Storage:
-- **Free tier**: 5GB
-- **Paid**: ~$0.20/GB/month
-- **25GB**: ~$5/month
+When the dry run looks good, run the real upload:
 
-This is much cheaper than database storage and much faster for serving files!
+```bash
+API_BASE="https://andreafoodstyle.com" \
+MEDIA_SOURCE_PATH="/Users/chris/dev/For Chris" \
+MEDIA_UPLOAD_CONCURRENCY=1 \
+npm run media:upload
+```
+
+The uploader is safe to rerun. It uploads to the same `/clients/...` destination paths, so reruns are useful as repair or retry passes.
+
+## What The Uploader Does
+
+1. Reads every `/clients/...` path referenced by `.local-store.json`
+2. Scans your local media folder recursively
+3. Matches files by exact relative path, nested suffix match, or unique filename
+4. Uploads each matched file to the live Railway app
+5. Writes `media-upload-report.json` with uploaded, missing, ambiguous, and failed files
+
+## Verification
+
+After the upload finishes, spot-check a few URLs:
+
+```bash
+curl -I "https://andreafoodstyle.com/clients/al-baker/A71I0016.jpg"
+curl -I "https://andreafoodstyle.com/clients/al-abdallah/ssvid.net---The-Original_1080p.mp4"
+BASE_URL=https://andreafoodstyle.com node perf-test.cjs
+```
+
+You can also inspect the mounted volume directly:
+
+```bash
+railway ssh
+ls -la /app/media
+```
+
+## Notes
+
+- Railway CLI shell access is useful for verification, not bulk file transfer.
+- The uploader uses the live app API because the app service is already mounted to the volume.
+- Keep `MEDIA_UPLOAD_CONCURRENCY` low at first. `1` is the safest starting point for large uploads.

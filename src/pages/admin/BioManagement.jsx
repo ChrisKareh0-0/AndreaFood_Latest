@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { defaultSiteText } from '@/content/siteText';
 import './Management.css';
+import { buildMediaFolder, uploadMediaFile } from '@/lib/mediaUpload';
 
 function BioManagement() {
   const [content, setContent] = useState(null);
   const [siteText, setSiteText] = useState(null);
   const [latestWorkPosts, setLatestWorkPosts] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [uploadingPostId, setUploadingPostId] = useState(null);
   const [formData, setFormData] = useState({});
+  const latestWorkFolder = buildMediaFolder('site-content', 'latest-work');
 
   useEffect(() => {
     async function fetchAdminData() {
@@ -55,15 +58,19 @@ function BioManagement() {
     }));
   };
 
-  const handleLatestWorkImageUpload = (e, id) => {
+  const handleLatestWorkImageUpload = async (e, id) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      handleLatestWorkPostChange(id, 'imageUrl', result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      setUploadingPostId(id);
+      const result = await uploadMediaFile(file, buildMediaFolder(latestWorkFolder, String(id)));
+      handleLatestWorkPostChange(id, 'imageUrl', result.url);
+    } catch (err) {
+      console.error('Failed to upload latest work image', err);
+    } finally {
+      setUploadingPostId(null);
+    }
   };
 
   const handleAddLatestWorkPost = () => {
@@ -86,7 +93,7 @@ function BioManagement() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const {
       aboutTitle,
@@ -112,23 +119,33 @@ function BioManagement() {
     setSiteText(nextSiteText);
     setLatestWorkPosts(nextLatestWorkPosts);
 
-    Promise.all([
-      fetch('/api/admin-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'bioContent', value: nextBio }),
-      }),
-      fetch('/api/admin-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'siteText', value: nextSiteText }),
-      }),
-      fetch('/api/admin-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'latestWorkPosts', value: nextLatestWorkPosts }),
-      }),
-    ]).then(() => setIsEditing(false));
+    try {
+      const responses = await Promise.all([
+        fetch('/api/admin-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'bioContent', value: nextBio }),
+        }),
+        fetch('/api/admin-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'siteText', value: nextSiteText }),
+        }),
+        fetch('/api/admin-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'latestWorkPosts', value: nextLatestWorkPosts }),
+        }),
+      ]);
+
+      if (responses.every((response) => response.ok)) {
+        setIsEditing(false);
+      } else {
+        console.error('One or more content saves failed');
+      }
+    } catch (err) {
+      console.error('Failed to save content', err);
+    }
   };
 
   const handleCancel = () => {
@@ -372,6 +389,7 @@ function BioManagement() {
                             style={{ display: 'none' }}
                           />
                         </label>
+                        {uploadingPostId === post.id ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
                       </div>
                       {post.imageUrl ? (
                         <div className="image-preview image-preview--compact" style={{ marginTop: '1rem' }}>

@@ -1,221 +1,375 @@
-// Upload client media to Railway Volume Storage
-// Files are stored in /app/public/clients/[client-name]/ and served statically
-
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const https = require('https');
 const FormData = require('form-data');
 
-const MEDIA_FOLDER = '/Users/chris/dev/For Chris/Web Materials';
-const API_BASE = 'http://localhost:8080';
+const projectRoot = __dirname;
+const localStorePath = path.join(projectRoot, '.local-store.json');
+const apiBase = String(process.env.API_BASE || process.argv[2] || '').trim().replace(/\/$/, '');
+const sourceRoot = process.env.MEDIA_SOURCE_PATH
+  ? path.resolve(projectRoot, process.env.MEDIA_SOURCE_PATH)
+  : null;
+const concurrency = Math.max(
+  1,
+  Number(process.env.MEDIA_UPLOAD_CONCURRENCY || process.env.UPLOAD_CONCURRENCY || 1)
+);
+const dryRun = process.argv.includes('--dry-run');
+const failFast = process.argv.includes('--fail-fast');
 
-// Normalize client names for matching
-function normalizeName(name) {
-  return name.toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+function fail(message) {
+  console.error(`Upload failed: ${message}`);
+  process.exit(1);
 }
 
-// Get file size in MB
-function getFileSizeMB(filePath) {
-  const stats = fs.statSync(filePath);
-  return (stats.size / (1024 * 1024)).toFixed(2);
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-// Upload file to Railway server
-async function uploadFile(filePath, clientFolder) {
-  const fileName = path.basename(filePath);
-  const ext = path.extname(fileName).toLowerCase();
-  
-  try {
-    const form = new FormData();
-    form.append('file', fs.createReadStream(filePath));
-    form.append('clientFolder', clientFolder);
-    
-    const response = await fetch(`${API_BASE}/api/media/upload`, {
-      method: 'POST',
-      body: form
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      return {
-        success: true,
-        url: result.url,
-        path: result.path
-      };
-    } else {
-      return {
-        success: false,
-        error: result.error
-      };
+function listFiles(rootDir) {
+  const results = [];
+
+  function walk(currentDir) {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      results.push(fullPath);
     }
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message
-    };
+  }
+
+  walk(rootDir);
+  return results;
+}
+
+function buildFileIndex(rootDir) {
+  const byRelative = new Map();
+  const byBaseName = new Map();
+
+  for (const filePath of listFiles(rootDir)) {
+    const relative = path.relative(rootDir, filePath).replace(/\\/g, '/');
+    byRelative.set(relative.toLowerCase(), filePath);
+
+    const baseName = path.basename(filePath).toLowerCase();
+    const existing = byBaseName.get(baseName) || [];
+    existing.push(filePath);
+    byBaseName.set(baseName, existing);
+  }
+
+  return { byRelative, byBaseName };
+}
+
+function normalizeClientPath(relativeUrl) {
+  return decodeURIComponent(String(relativeUrl || ''))
+    .replace(/^\/clients\//i, '')
+    .replace(/^clients\//i, '')
+    .replace(/[?#].*$/, '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+}
+
+function resolveSourceFile(relativeUrl, index) {
+  const relativePath = normalizeClientPath(relativeUrl);
+  const target = relativePath.toLowerCase();
+  const exact = index.byRelative.get(target);
+
+  if (exact) {
+    return { path: exact, match: 'exact', relativePath };
+  }
+
+  const suffixMatches = [];
+  for (const [candidateRelative, candidatePath] of index.byRelative.entries()) {
+    if (candidateRelative === target || candidateRelative.endsWith(`/${target}`)) {
+      suffixMatches.push(candidatePath);
+    }
+  }
+
+  if (suffixMatches.length === 1) {
+    return { path: suffixMatches[0], match: 'suffix', relativePath };
+  }
+
+  const baseName = path.basename(relativePath).toLowerCase();
+  const baseNameMatches = index.byBaseName.get(baseName) || [];
+  if (baseNameMatches.length === 1) {
+    return { path: baseNameMatches[0], match: 'basename', relativePath };
+  }
+
+  const candidates = suffixMatches.length > 1 ? suffixMatches : baseNameMatches;
+  return {
+    path: null,
+    match: candidates.length > 1 ? 'ambiguous' : 'missing',
+    relativePath,
+    candidates,
+  };
+}
+
+function readReferencedUrls() {
+  if (!fs.existsSync(localStorePath)) {
+    fail(`Missing .local-store.json at ${localStorePath}`);
+  }
+
+  const payload = readJson(localStorePath);
+  const clients = JSON.parse(payload.clients || '[]');
+  const urls = new Set();
+
+  for (const client of clients) {
+    for (const url of Array.isArray(client.images) ? client.images : []) {
+      if (typeof url === 'string' && url.startsWith('/clients/')) {
+        urls.add(url);
+      }
+    }
+
+    for (const url of [client.thumbnailUrl, client.logo]) {
+      if (typeof url === 'string' && url.startsWith('/clients/')) {
+        urls.add(url);
+      }
+    }
+  }
+
+  return Array.from(urls).sort((a, b) => a.localeCompare(b));
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+}
+
+function getPathname(value) {
+  try {
+    return new URL(value, apiBase).pathname;
+  } catch {
+    return value;
   }
 }
 
-async function uploadMedia() {
-  console.log('🚂 Railway Media Upload Script\n');
-  console.log('=' .repeat(50));
-  console.log('This script will:');
-  console.log('1. Upload media files to Railway Volume Storage');
-  console.log('2. Store file URLs in the database');
-  console.log('3. Files will be served from /clients/[client-name]/');
-  console.log('='.repeat(50));
-  console.log();
-  
-  if (!fs.existsSync(MEDIA_FOLDER)) {
-    console.error(`❌ Folder not found: ${MEDIA_FOLDER}`);
-    return;
-  }
-
-  // Get all client folders
-  const clientFolders = fs.readdirSync(MEDIA_FOLDER)
-    .filter(item => {
-      const itemPath = path.join(MEDIA_FOLDER, item);
-      return fs.statSync(itemPath).isDirectory();
+function getFormLength(form) {
+  return new Promise((resolve, reject) => {
+    form.getLength((error, length) => {
+      if (error) return reject(error);
+      resolve(length);
     });
+  });
+}
 
-  console.log(`📁 Found ${clientFolders.length} client folders\n`);
+async function uploadResolvedFile(task) {
+  const form = new FormData();
+  const clientFolder = path.posix.dirname(task.relativePath) === '.'
+    ? 'misc'
+    : path.posix.dirname(task.relativePath);
 
-  // Fetch clients from database
-  console.log('📡 Fetching clients from database...');
-  const clientsRes = await fetch(`${API_BASE}/api/clients`);
-  const clientsData = await clientsRes.json();
-  const clients = clientsData.clients || [];
-  console.log(`✅ Found ${clients.length} clients in database\n`);
-
-  // Create name mapping
-  const clientMap = new Map();
-  clients.forEach(client => {
-    const normalizedName = normalizeName(client.name);
-    clientMap.set(normalizedName, client);
+  form.append('clientFolder', clientFolder);
+  form.append('file', fs.createReadStream(task.sourceFile), {
+    filename: path.posix.basename(task.relativePath),
+    knownLength: task.bytes,
   });
 
-  let totalUploaded = 0;
-  let totalSkipped = 0;
-  let totalErrors = 0;
-  let totalSize = 0;
+  const url = new URL('/api/media/upload', apiBase);
+  const transport = url.protocol === 'https:' ? https : http;
+  const headers = form.getHeaders();
+  headers['Content-Length'] = await getFormLength(form);
 
-  // Process each folder
-  for (const folderName of clientFolders) {
-    const folderPath = path.join(MEDIA_FOLDER, folderName);
-    const normalizedFolder = normalizeName(folderName);
-    
-    // Find matching client
-    let matchingClient = null;
-    let matchType = '';
-    
-    if (clientMap.has(normalizedFolder)) {
-      matchingClient = clientMap.get(normalizedFolder);
-      matchType = 'exact';
-    } else {
-      for (const [normalizedName, client] of clientMap.entries()) {
-        if (normalizedFolder.includes(normalizedName) || normalizedName.includes(normalizedFolder)) {
-          matchingClient = client;
-          matchType = 'partial';
-          break;
+  return new Promise((resolve, reject) => {
+    const request = transport.request({
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      method: 'POST',
+      path: `${url.pathname}${url.search}`,
+      headers,
+    }, (response) => {
+      const chunks = [];
+
+      response.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+
+      response.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        let payload = {};
+
+        try {
+          payload = body ? JSON.parse(body) : {};
+        } catch {
+          payload = { raw: body };
         }
-      }
-    }
 
-    if (!matchingClient) {
-      console.log(`⚠️  No matching client for folder: "${folderName}"`);
-      totalSkipped++;
-      continue;
-    }
-
-    console.log(`\n📂 ${folderName} → ${matchingClient.name} (${matchType})`);
-
-    // Get all media files
-    const files = fs.readdirSync(folderPath)
-      .filter(file => {
-        const ext = path.extname(file).toLowerCase();
-        return ext === '.mp4' || ext === '.jpg' || ext === '.jpeg' || ext === '.png' || ext === '.webm' || ext === '.mov';
-      })
-      .sort(); // Sort alphabetically for consistent ordering
-
-    if (files.length === 0) {
-      console.log(`   └─ No media files found`);
-      continue;
-    }
-
-    console.log(`   └─ ${files.length} file(s) to upload`);
-
-    // Upload files
-    const fileUrls = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const filePath = path.join(folderPath, file);
-      const sizeMB = getFileSizeMB(filePath);
-      
-      process.stdout.write(`      [${String(i + 1).padStart(3, '0')}/${files.length}] ${file} (${sizeMB} MB)... `);
-      
-      const clientFolder = normalizeName(matchingClient.name).replace(/\s+/g, '-');
-      const result = await uploadFile(filePath, clientFolder);
-      
-      if (result.success) {
-        fileUrls.push(result.url);
-        totalUploaded++;
-        totalSize += parseFloat(sizeMB);
-        console.log(`✓`);
-      } else {
-        console.log(`✗ ${result.error}`);
-        totalErrors++;
-      }
-    }
-
-    // Update client in database with URLs
-    if (fileUrls.length > 0) {
-      try {
-        const updateData = {
-          images: fileUrls,
-          categories: matchingClient.categories || ['Commercial']
-        };
-
-        const res = await fetch(`${API_BASE}/api/clients/${matchingClient.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updateData)
-        });
-
-        const result = await res.json();
-        if (result.success) {
-          console.log(`   ✅ Updated ${matchingClient.name} with ${fileUrls.length} files\n`);
-        } else {
-          console.log(`   ❌ Failed to update: ${result.error}\n`);
-          totalErrors++;
+        if (response.statusCode < 200 || response.statusCode >= 300 || payload?.success === false) {
+          return reject(new Error(payload?.error || `HTTP ${response.statusCode}`));
         }
-      } catch (err) {
-        console.log(`   ❌ Error updating: ${err.message}\n`);
-        totalErrors++;
-      }
-    } else {
-      console.log();
-    }
-  }
 
-  const totalSizeGB = (totalSize / 1024).toFixed(2);
-  
-  console.log('\n' + '='.repeat(50));
-  console.log('📊 Upload Summary:');
-  console.log(`   ✅ Files uploaded: ${totalUploaded}`);
-  console.log(`   📦 Total size: ${totalSizeGB} GB (${totalSize.toFixed(0)} MB)`);
-  console.log(`   ⚠️  Skipped: ${totalSkipped}`);
-  console.log(`   ❌ Errors: ${totalErrors}`);
-  console.log('='.repeat(50));
-  console.log('\n💡 Files are stored in /app/public/clients/ on Railway');
-  console.log('   and served from /clients/[client-name]/');
+        resolve(payload);
+      });
+    });
+
+    request.on('error', reject);
+    request.setTimeout(300000, () => {
+      request.destroy(new Error('Upload timed out'));
+    });
+
+    form.pipe(request);
+  });
 }
 
-// Run the script
-uploadMedia().catch(err => {
-  console.error('\n❌ Fatal error:', err);
+async function runQueue(items, limit, worker) {
+  let index = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const currentIndex = index;
+      index += 1;
+      if (currentIndex >= items.length) return;
+      await worker(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(workers);
+}
+
+async function main() {
+  if (!apiBase) {
+    fail('API_BASE is required. Example: API_BASE=https://andreafoodstyle.com');
+  }
+
+  if (!sourceRoot) {
+    fail('MEDIA_SOURCE_PATH is required. Point it at the folder that contains your raw client media library.');
+  }
+
+  if (!fs.existsSync(sourceRoot)) {
+    fail(`MEDIA_SOURCE_PATH does not exist: ${sourceRoot}`);
+  }
+
+  const referencedUrls = readReferencedUrls();
+  const fileIndex = buildFileIndex(sourceRoot);
+  const resolvedTasks = [];
+  const missing = [];
+  const ambiguous = [];
+
+  for (const url of referencedUrls) {
+    const resolved = resolveSourceFile(url, fileIndex);
+    if (!resolved.path) {
+      if (resolved.match === 'ambiguous') {
+        ambiguous.push({
+          url,
+          candidates: resolved.candidates.map((candidate) =>
+            path.relative(sourceRoot, candidate).replace(/\\/g, '/')
+          ),
+        });
+      } else {
+        missing.push(url);
+      }
+      continue;
+    }
+
+    const sourceStats = fs.statSync(resolved.path);
+    resolvedTasks.push({
+      url,
+      sourceFile: resolved.path,
+      sourceRelative: path.relative(sourceRoot, resolved.path).replace(/\\/g, '/'),
+      relativePath: resolved.relativePath,
+      bytes: sourceStats.size,
+      match: resolved.match,
+    });
+  }
+
+  const report = {
+    apiBase,
+    sourceRoot,
+    dryRun,
+    totals: {
+      referenced: referencedUrls.length,
+      resolved: resolvedTasks.length,
+      uploaded: 0,
+      failed: 0,
+      missing: missing.length,
+      ambiguous: ambiguous.length,
+      uploadedBytes: 0,
+      uploadedSize: '0 B',
+    },
+    uploaded: [],
+    failed: [],
+    missing,
+    ambiguous,
+  };
+
+  if (!dryRun) {
+    console.log(`Uploading ${resolvedTasks.length} files to ${apiBase} with concurrency ${concurrency}`);
+  } else {
+    console.log(`Dry run: resolved ${resolvedTasks.length} of ${referencedUrls.length} referenced files`);
+  }
+
+  await runQueue(resolvedTasks, concurrency, async (task, taskIndex) => {
+    const label = `[${taskIndex + 1}/${resolvedTasks.length}] ${task.relativePath}`;
+
+    if (dryRun) {
+      console.log(`${label} -> ${task.sourceRelative} (${task.match})`);
+      return;
+    }
+
+    const startedAt = Date.now();
+    try {
+      const payload = await uploadResolvedFile(task);
+      const returnedPath = getPathname(payload.url || '');
+
+      report.uploaded.push({
+        url: task.url,
+        source: task.sourceRelative,
+        match: task.match,
+        returnedUrl: payload.url || '',
+        returnedPath,
+        bytes: task.bytes,
+        durationMs: Date.now() - startedAt,
+      });
+      report.totals.uploaded += 1;
+      report.totals.uploadedBytes += task.bytes;
+      report.totals.uploadedSize = formatBytes(report.totals.uploadedBytes);
+
+      console.log(`${label} uploaded in ${Date.now() - startedAt}ms (${formatBytes(task.bytes)})`);
+    } catch (error) {
+      report.failed.push({
+        url: task.url,
+        source: task.sourceRelative,
+        match: task.match,
+        error: error.message,
+      });
+      report.totals.failed += 1;
+      console.log(`${label} failed: ${error.message}`);
+      if (failFast) {
+        throw error;
+      }
+    }
+  });
+
+  const reportPath = path.join(projectRoot, 'upload-to-railway-report.json');
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+
+  console.log('');
+  console.log(`Referenced URLs: ${report.totals.referenced}`);
+  console.log(`Resolved files: ${report.totals.resolved}`);
+  console.log(`Uploaded: ${report.totals.uploaded}`);
+  console.log(`Failed: ${report.totals.failed}`);
+  console.log(`Missing: ${report.totals.missing}`);
+  console.log(`Ambiguous: ${report.totals.ambiguous}`);
+  console.log(`Uploaded size: ${report.totals.uploadedSize}`);
+  console.log(`Report written to: ${reportPath}`);
+
+  if (report.totals.failed > 0 || report.totals.missing > 0 || report.totals.ambiguous > 0) {
+    process.exitCode = 2;
+  }
+}
+
+main().catch((error) => {
+  console.error(`Upload failed: ${error.message}`);
   process.exit(1);
 });

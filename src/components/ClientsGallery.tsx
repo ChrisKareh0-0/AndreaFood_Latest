@@ -1,13 +1,16 @@
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import InteractiveBentoGallery from "@/components/ui/interactive-bento-gallery"
 
 interface Client {
   id: number
-  name: string
-  logo: string
-  images: string[]
-  categories: string[]
-  description: string
+  name?: string
+  logo?: string
+  thumbnailUrl?: string
+  previewType?: 'image' | 'video'
+  mediaCount?: number
+  images?: string[]
+  categories?: string[]
+  description?: string
 }
 
 interface GalleryMediaItem {
@@ -18,79 +21,114 @@ interface GalleryMediaItem {
   url: string
   span: string
   categories: string[]
-  allImages: string[]
+  sourceClient?: Client
 }
 
-export function ClientsGallery() {
+interface ClientsGalleryProps {
+  clients?: Client[]
+  isReady?: boolean
+}
+
+const isVideoUrl = (url?: string): boolean => {
+  if (!url) return false
+  if (url.startsWith('data:video/')) return true
+  return url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov')
+}
+
+const getPreviewUrl = (client?: Client): string => {
+  if (!client) return ''
+
+  const media = [
+    ...(client.thumbnailUrl ? [client.thumbnailUrl] : []),
+    ...(Array.isArray(client.images) ? client.images : []),
+    ...(client.logo ? [client.logo] : [])
+  ].filter(Boolean) as string[]
+
+  return media[0] || ''
+}
+
+const buildGalleryItem = (client: Client): GalleryMediaItem | null => {
+  const previewUrl = getPreviewUrl(client)
+  const hasMedia = previewUrl
+    || client.logo
+    || Boolean(client.mediaCount)
+    || (Array.isArray(client.images) && client.images.length > 0)
+
+  if (!hasMedia) {
+    return null
+  }
+
+  return {
+    id: client.id,
+    type: client.previewType || (isVideoUrl(previewUrl) ? 'video' : 'image'),
+    title: client.name || 'Untitled',
+    desc: client.description || 'No description available.',
+    url: previewUrl,
+    span: 'col-span-1 row-span-1',
+    categories: client.categories || [],
+    sourceClient: client,
+  }
+}
+
+export function ClientsGallery({ clients, isReady = false }: ClientsGalleryProps) {
   const [galleryItems, setGalleryItems] = useState<GalleryMediaItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 12
 
   useEffect(() => {
-    async function fetchClients() {
+    let cancelled = false
+
+    const syncClients = async () => {
+      if (Array.isArray(clients)) {
+        const transformedItems = clients
+          .map(buildGalleryItem)
+          .filter(Boolean) as GalleryMediaItem[]
+
+        if (cancelled) return
+
+        setGalleryItems(transformedItems)
+        setIsLoading(!isReady)
+        return
+      }
+
+      setIsLoading(true)
+
       try {
         const res = await fetch('/api/clients')
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`)
         }
+
         const data = await res.json()
-        const clients: Client[] = Array.isArray(data.clients) ? data.clients : []
+        const fetchedClients: Client[] = Array.isArray(data.clients) ? data.clients : []
+        const transformedItems = fetchedClients
+          .map(buildGalleryItem)
+          .filter(Boolean) as GalleryMediaItem[]
 
-        // Transform clients to gallery items
-        const transformedItems: GalleryMediaItem[] = clients
-          .filter((client) => {
-            // Only include clients that have images or logo
-            const hasImages = (client.images && client.images.length > 0)
-            const hasLogo = (client.logo && client.logo.trim() !== '')
-            return hasImages || hasLogo
-          })
-          .map((client, index) => {
-            // Get all images for this client (images array + logo if exists)
-            const allMedia: string[] = []
-
-            // Add all images from images array
-            if (client.images && client.images.length > 0) {
-              allMedia.push(...client.images)
-            }
-
-            // Add logo if it exists and is not already in images
-            if (client.logo && client.logo.trim() !== '') {
-              if (!allMedia.includes(client.logo)) {
-                allMedia.push(client.logo)
-              }
-            }
-
-            // Determine type based on first media item or TVC category
-            const firstMedia = allMedia[0]
-            const isVideo = firstMedia?.endsWith('.mp4') ||
-                           firstMedia?.endsWith('.webm') ||
-                           firstMedia?.endsWith('.mov') ||
-                           client.categories?.includes('TVC')
-
-            return {
-              id: client.id,
-              type: isVideo ? 'video' : 'image',
-              title: client.name || 'Untitled',
-              desc: client.description || 'No description available.',
-              url: firstMedia, // First media as thumbnail
-              span: 'col-span-1 row-span-1',
-              categories: client.categories || [],
-              allImages: allMedia, // Store all media for modal view
-            }
-          })
+        if (cancelled) return
 
         setGalleryItems(transformedItems)
       } catch (err) {
         console.error('Failed to load clients for gallery', err)
       } finally {
-        setIsLoading(false)
+        if (!cancelled) {
+          setIsLoading(false)
+        }
       }
     }
-    fetchClients()
-  }, [])
 
-  // Pagination
+    syncClients()
+
+    return () => {
+      cancelled = true
+    }
+  }, [clients, isReady])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [galleryItems.length])
+
   const totalPages = Math.ceil(galleryItems.length / itemsPerPage)
   const paginatedItems = galleryItems.slice(
     (currentPage - 1) * itemsPerPage,
@@ -119,8 +157,7 @@ export function ClientsGallery() {
           <div className="text-white text-center text-xl">No clients to display.</div>
         )}
       </div>
-      
-      {/* Pagination Controls */}
+
       {totalPages > 1 && (
         <div className="pagination-controls" style={{ marginTop: '2rem' }}>
           <button
@@ -142,7 +179,7 @@ export function ClientsGallery() {
           >
             ← Previous
           </button>
-          
+
           <div className="pagination-numbers" style={{ display: 'flex', gap: '0.5rem' }}>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
               <button
@@ -168,7 +205,7 @@ export function ClientsGallery() {
               </button>
             ))}
           </div>
-          
+
           <button
             className="pagination-btn"
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}

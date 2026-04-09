@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import './Management.css'
+import { buildMediaFolder, uploadMediaFile } from '@/lib/mediaUpload'
 
 function PersonalDataManagement() {
   const [personalData, setPersonalData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
+  const [uploadingField, setUploadingField] = useState('')
   const [formData, setFormData] = useState({
     fullName: '',
     title: '',
@@ -15,6 +17,7 @@ function PersonalDataManagement() {
     heroImage: '',
     profileImage: ''
   })
+  const personalMediaFolder = buildMediaFolder('site-content', 'personal-data')
 
   useEffect(() => {
     const fetchPersonalData = async () => {
@@ -33,14 +36,20 @@ function PersonalDataManagement() {
     fetchPersonalData()
   }, [])
 
-  const handleFileUpload = (e, field) => {
+  const handleFileUpload = async (e, field) => {
     const file = e.target.files[0]
+    e.target.value = ''
+
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setFormData({ ...formData, [field]: reader.result })
+      try {
+        setUploadingField(field)
+        const result = await uploadMediaFile(file, personalMediaFolder)
+        setFormData(prev => ({ ...prev, [field]: result.url }))
+      } catch (err) {
+        console.error('Failed to upload personal image', err)
+      } finally {
+        setUploadingField('')
       }
-      reader.readAsDataURL(file)
     }
   }
 
@@ -236,6 +245,7 @@ function PersonalDataManagement() {
                         style={{ display: 'none' }}
                       />
                     </label>
+                    {uploadingField === 'heroImage' ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
                     {formData.heroImage && (
                       <div className="image-preview">
                         <img src={formData.heroImage} alt="Hero preview" />
@@ -261,6 +271,7 @@ function PersonalDataManagement() {
                         style={{ display: 'none' }}
                       />
                     </label>
+                    {uploadingField === 'profileImage' ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
                     {formData.profileImage && (
                       <div className="image-preview">
                         <img src={formData.profileImage} alt="Profile preview" />

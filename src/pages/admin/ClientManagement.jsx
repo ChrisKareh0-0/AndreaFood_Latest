@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import './Management.css'
 import { useToast } from '../../hooks/useToast'
 import { ToastContainer } from '../../components/Toast'
+import { buildMediaFolder, extractMediaFolderFromUrl, uploadMediaFile, uploadMediaFiles } from '@/lib/mediaUpload'
 
 function ClientManagement() {
   const { toasts, showToast, removeToast } = useToast()
@@ -11,7 +12,7 @@ function ClientManagement() {
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const res = await fetch('/api/clients')
+        const res = await fetch('/api/clients?includeMedia=true')
         const data = await res.json()
         setClients(data.clients || [])
       } catch (err) {
@@ -75,25 +76,69 @@ function ClientManagement() {
     setFormData({ ...formData, categories: newCategories })
   }
 
-  const handleFileUpload = (e, field) => {
+  const getClientFolder = () => {
+    const existingFolder = [
+      formData.logo,
+      ...(Array.isArray(formData.images) ? formData.images : []),
+      editingClient?.thumbnailUrl,
+      editingClient?.logo,
+      ...(Array.isArray(editingClient?.images) ? editingClient.images : [])
+    ]
+      .map((value) => extractMediaFolderFromUrl(value))
+      .find(Boolean)
+
+    if (existingFolder) {
+      return existingFolder
+    }
+
+    const folder = buildMediaFolder(formData.name || editingClient?.name)
+    return folder === 'unknown' ? '' : folder
+  }
+
+  const handleFileUpload = async (e, field) => {
     const file = e.target.files[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setFormData({ ...formData, [field]: reader.result })
-      }
-      reader.readAsDataURL(file)
+    e.target.value = ''
+
+    if (!file) {
+      return
+    }
+
+    const clientFolder = getClientFolder()
+    if (!clientFolder) {
+      showToast('Enter a client name before uploading media.', 'error')
+      return
+    }
+
+    try {
+      const result = await uploadMediaFile(file, clientFolder)
+      setFormData(prev => ({ ...prev, [field]: result.url }))
+    } catch (err) {
+      showToast(err.message || 'Failed to upload media', 'error')
     }
   }
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setFormData({ ...formData, images: [...formData.images, reader.result] })
-      }
-      reader.readAsDataURL(file)
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+
+    if (files.length === 0) {
+      return
+    }
+
+    const clientFolder = getClientFolder()
+    if (!clientFolder) {
+      showToast('Enter a client name before uploading gallery media.', 'error')
+      return
+    }
+
+    try {
+      const uploadedFiles = await uploadMediaFiles(files, clientFolder)
+      setFormData(prev => ({
+        ...prev,
+        images: [...prev.images, ...uploadedFiles.map(file => file.url)]
+      }))
+    } catch (err) {
+      showToast(err.message || 'Failed to upload gallery media', 'error')
     }
   }
 
@@ -107,13 +152,18 @@ function ClientManagement() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const payload = {
+      ...formData,
+      images: Array.isArray(formData.images) ? formData.images.filter(Boolean) : []
+    }
+
     if (editingClient) {
       // Update existing client using PUT endpoint
       try {
         const res = await fetch(`/api/clients/${editingClient.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(payload)
         })
         const data = await res.json()
         if (data.success) {
@@ -131,7 +181,7 @@ function ClientManagement() {
         const res = await fetch('/api/clients/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(payload)
         })
         const data = await res.json()
         if (data.success) {
@@ -249,16 +299,7 @@ function ClientManagement() {
                       type="file"
                       accept="image/*,video/*"
                       multiple
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files)
-                        files.forEach(file => {
-                          const reader = new FileReader()
-                          reader.onloadend = () => {
-                            setFormData(prev => ({ ...prev, images: [...prev.images, reader.result] }))
-                          }
-                          reader.readAsDataURL(file)
-                        })
-                      }}
+                      onChange={handleImageUpload}
                       style={{ display: 'none' }}
                     />
                   </label>

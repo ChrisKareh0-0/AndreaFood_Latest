@@ -1,440 +1,1160 @@
-// Optimized server with caching and compression for Railway
 require('dotenv').config();
 const express = require('express');
+const fs = require('fs');
+const multer = require('multer');
 const path = require('path');
 const pool = require('./db.cjs');
-const bodyParser = require('body-parser');
-const multer = require('multer');
-const fs = require('fs');
-const zlib = require('zlib');
+
 const app = express();
 
 const port = process.env.PORT || 8080;
 const distPath = path.join(__dirname, 'dist');
 const publicPath = path.join(__dirname, 'public');
-
-// Ensure public directories exist
-const clientsPath = path.join(publicPath, 'clients');
-if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
-if (!fs.existsSync(clientsPath)) fs.mkdirSync(clientsPath, { recursive: true });
-
-// Load local store if exists
+const repoClientsPath = path.join(publicPath, 'clients');
+const configuredMediaStoragePath = text(process.env.MEDIA_STORAGE_PATH);
+const mediaStoragePath = configuredMediaStoragePath
+  ? (path.isAbsolute(configuredMediaStoragePath)
+      ? configuredMediaStoragePath
+      : path.join(__dirname, configuredMediaStoragePath))
+  : repoClientsPath;
 const localStorePath = path.join(__dirname, '.local-store.json');
-let useLocalFallback = false;
-const localStore = {};
-
-if (fs.existsSync(localStorePath)) {
-  try {
-    const data = JSON.parse(fs.readFileSync(localStorePath, 'utf8'));
-    Object.assign(localStore, data);
-    console.log('✅ Loaded local store from:', localStorePath);
-    useLocalFallback = true;
-  } catch (err) {
-    console.log('⚠️  Could not load local store:', err.message);
-  }
-}
-
-app.use(express.static(distPath));
-app.use('/public', express.static(publicPath));
-app.use('/clients', express.static(clientsPath));
-
-// Multer setup
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const clientFolder = req.body?.clientFolder || 'unknown';
-    const uploadPath = path.join(clientsPath, clientFolder);
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, safeName);
-  }
-});
-
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 500 * 1024 * 1024 }
-});
-
-app.use(bodyParser.json({ limit: '500mb' }));
-app.use(bodyParser.urlencoded({ limit: '500mb', extended: true }));
-
-// ========== IN-MEMORY CACHE WITH TTL ==========
+const mediaBaseUrl = (process.env.MEDIA_BASE_URL || '').replace(/\/$/, '');
 const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
+
+let databaseReady = false;
+let databaseError = pool ? null : 'DATABASE_URL is not configured';
+const localHeroImagePath = '/clients/site-content/personal/hero-image.png';
+const enableLocalContentFallback =
+  process.env.ENABLE_LOCAL_CONTENT_FALLBACK === 'true' ||
+  (!pool && process.env.NODE_ENV !== 'production');
+const localContent = {
+  personalData: {
+    fullName: 'Andrea Abi Khalil',
+    email: 'andreaabikhalil@gmail.com',
+    phone: '03 56 16 58',
+    heroImage: fs.existsSync(path.join(repoClientsPath, 'site-content', 'personal', 'hero-image.png'))
+      ? localHeroImagePath
+      : '',
+    profileImage: '',
+  },
+  bioContent: {},
+  siteText: {},
+  latestWorkPosts: [],
+};
+
+if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
+if (!fs.existsSync(repoClientsPath)) fs.mkdirSync(repoClientsPath, { recursive: true });
+if (!fs.existsSync(mediaStoragePath)) fs.mkdirSync(mediaStoragePath, { recursive: true });
 
 function getCache(key) {
-  const item = cache.get(key);
-  if (!item) return null;
-  if (Date.now() > item.expiry) {
+  const cached = cache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt < Date.now()) {
     cache.delete(key);
     return null;
   }
-  return item.data;
+  return cached.value;
 }
 
-function setCache(key, data) {
-  cache.set(key, {
-    data,
-    expiry: Date.now() + CACHE_TTL
+function setCache(key, value, ttl = CACHE_TTL) {
+  cache.set(key, { value, expiresAt: Date.now() + ttl });
+}
+
+function clearCache() {
+  cache.clear();
+}
+
+function setApiCache(res, seconds = 120) {
+  res.setHeader('Cache-Control', `public, max-age=${seconds}, stale-while-revalidate=300`);
+}
+
+function text(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function uniqueStrings(values) {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set();
+
+  return values
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => {
+      if (!value || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
+}
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function sanitizeFolderSegment(value, fallback = 'unknown') {
+  const safe = String(value || '')
+    .toLowerCase()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return safe || fallback;
+}
+
+function safePathSegment(value) {
+  const cleaned = String(value || '')
+    .replace(/\0/g, '')
+    .trim();
+
+  if (!cleaned || cleaned === '.' || cleaned === '..') return '';
+  return cleaned.replace(/[\\/]/g, '').trim();
+}
+
+function safeUploadFileName(value) {
+  const cleaned = safePathSegment(path.basename(String(value || '')));
+  return cleaned || `upload-${Date.now()}`;
+}
+
+function buildUploadFolder(value) {
+  const parts = String(value || '')
+    .split('/')
+    .flatMap((part) => part.split('\\'))
+    .map((part) => safePathSegment(part))
+    .filter(Boolean);
+
+  return parts.length > 0 ? parts.join(path.sep) : 'misc';
+}
+
+function buildMediaRoute(value) {
+  const parts = String(value || '')
+    .split('/')
+    .flatMap((part) => part.split('\\'))
+    .map((part) => safePathSegment(part))
+    .filter(Boolean);
+
+  return parts.length > 0 ? parts.join('/') : 'misc';
+}
+
+function mediaType(url) {
+  if ((url || '').startsWith('data:video/')) return 'video';
+  return /\.(mp4|webm|mov)$/i.test(url || '') ? 'video' : 'image';
+}
+
+function mediaUrl(url) {
+  const value = text(url);
+  if (!value) return '';
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith('data:')) return value;
+  if (!mediaBaseUrl) return value;
+  return `${mediaBaseUrl}${value.startsWith('/') ? '' : '/'}${value}`;
+}
+
+function parseJson(value, fallback = null) {
+  if (value == null) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function totalMediaCount(clients) {
+  if (!Array.isArray(clients)) return 0;
+  return clients.reduce((sum, client) => sum + (Array.isArray(client?.images) ? client.images.length : 0), 0);
+}
+
+function canUseLocalContentFallback() {
+  return enableLocalContentFallback && (!pool || !databaseReady);
+}
+
+function loadClientsFromLocalStore() {
+  if (!fs.existsSync(localStorePath)) return [];
+
+  try {
+    const payload = JSON.parse(fs.readFileSync(localStorePath, 'utf8'));
+    return parseJson(payload.clients, []);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeClient(input, fallbackId) {
+  const id = Number.isSafeInteger(Number(input?.id)) ? Number(input.id) : fallbackId;
+  const name = text(input?.name);
+
+  if (!name) throw new Error('Client name is required');
+
+  const images = uniqueStrings(input?.images);
+  const logo = text(input?.logo);
+  const categories = uniqueStrings(input?.categories);
+  const description = text(input?.description);
+  const thumbnailUrl = text(input?.thumbnailUrl) || images[0] || logo || '';
+
+  return {
+    id,
+    slug: `${slugify(name) || 'client'}-${id}`,
+    name,
+    logo,
+    categories,
+    description,
+    thumbnailUrl,
+    images,
+  };
+}
+
+function serializeClient(row, media = null) {
+  const logo = mediaUrl(row.logo);
+  const galleryMedia = Array.isArray(media) ? media : null;
+  const thumbnailUrl = mediaUrl(row.thumbnail_url || row.logo || galleryMedia?.[0]?.url || '');
+
+  return {
+    id: Number(row.id),
+    name: row.name,
+    slug: row.slug,
+    logo,
+    thumbnailUrl,
+    previewType: mediaType(row.thumbnail_url || row.logo || galleryMedia?.[0]?.url || ''),
+    categories: Array.isArray(row.categories) ? row.categories : [],
+    description: row.description || '',
+    mediaCount: Number(row.media_count || galleryMedia?.length || 0),
+    images: galleryMedia ? galleryMedia.map((item) => item.url) : undefined,
+    media: galleryMedia || undefined,
+  };
+}
+
+function listLocalClients(options = {}) {
+  const search = text(options.search).toLowerCase();
+  const category = text(options.category);
+  const includeMedia = Boolean(options.includeMedia);
+  const page = Number.isFinite(options.page) ? options.page : 1;
+  const limit = Number.isFinite(options.limit) ? options.limit : undefined;
+  const cacheKey = `local-clients:${search}:${category}:${page}:${limit || 'all'}:${includeMedia ? 'full' : 'summary'}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
+  const normalized = loadClientsFromLocalStore().map((client, index) =>
+    normalizeClient(client, 1000000 + index)
+  );
+
+  const filtered = normalized.filter((client) => {
+    const matchesSearch = !search || client.name.toLowerCase().includes(search);
+    const matchesCategory = !category || category === 'All' || client.categories.includes(category);
+    return matchesSearch && matchesCategory;
+  });
+
+  const total = filtered.length;
+  const safeLimit = limit || Math.max(total, 1);
+  const offset = (page - 1) * safeLimit;
+  const slice = filtered.slice(offset, offset + safeLimit);
+
+  const clients = slice.map((client) => {
+    const row = {
+      id: client.id,
+      slug: client.slug,
+      name: client.name,
+      logo: includeMedia ? client.logo : (text(client.logo).startsWith('data:') ? '' : client.logo),
+      categories: client.categories,
+      description: client.description,
+      thumbnail_url: includeMedia
+        ? client.thumbnailUrl
+        : (text(client.thumbnailUrl).startsWith('data:') ? '' : client.thumbnailUrl),
+      media_count: client.images.length,
+    };
+
+    const media = includeMedia
+      ? client.images.map((url, index) => ({
+          id: index + 1,
+          url: mediaUrl(url),
+          type: mediaType(url),
+          sortOrder: index,
+        }))
+      : null;
+
+    return serializeClient(row, media);
+  });
+
+  const result = {
+    clients,
+    pagination: {
+      page,
+      limit: safeLimit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+    },
+    source: 'local-fallback',
+  };
+
+  setCache(cacheKey, result);
+  return result;
+}
+
+function getLocalClientById(clientId, includeMedia = false) {
+  const found = loadClientsFromLocalStore()
+    .map((client, index) => normalizeClient(client, 1000000 + index))
+    .find((client) => Number(client.id) === Number(clientId));
+
+  if (!found) return null;
+
+  return serializeClient(
+    {
+      id: found.id,
+      slug: found.slug,
+      name: found.name,
+      logo: found.logo,
+      categories: found.categories,
+      description: found.description,
+      thumbnail_url: found.thumbnailUrl,
+      media_count: found.images.length,
+    },
+    includeMedia
+      ? found.images.map((url, index) => ({
+          id: index + 1,
+          url: mediaUrl(url),
+          type: mediaType(url),
+          sortOrder: index,
+        }))
+      : null
+  );
+}
+
+function getLocalAdminValue(key, fallback = null) {
+  return Object.prototype.hasOwnProperty.call(localContent, key)
+    ? localContent[key]
+    : fallback;
+}
+
+async function dbQuery(query, params = []) {
+  if (!pool || !databaseReady) {
+    throw new Error(databaseError || 'Database unavailable');
+  }
+  return pool.query(query, params);
+}
+
+async function withTransaction(work) {
+  if (!pool || !databaseReady) {
+    throw new Error(databaseError || 'Database unavailable');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function ensureSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_data (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id BIGINT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      logo TEXT DEFAULT '',
+      categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+      description TEXT DEFAULT '',
+      thumbnail_url TEXT DEFAULT '',
+      media_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS client_media (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'image',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_client_media_client_id_sort ON client_media(client_id, sort_order, id)');
+}
+
+async function upsertClient(dbClient, input, options = {}) {
+  const replaceMedia = options.replaceMedia !== false;
+  const existing = await dbClient.query('SELECT media_count, thumbnail_url FROM clients WHERE id = $1', [input.id]);
+  const current = existing.rows[0];
+  const mediaCount = replaceMedia ? input.images.length : Number(current?.media_count || 0);
+  const thumbnailUrl = replaceMedia
+    ? (input.thumbnailUrl || input.logo || input.images[0] || '')
+    : (input.thumbnailUrl || input.logo || current?.thumbnail_url || '');
+
+  await dbClient.query(
+    `
+      INSERT INTO clients (id, slug, name, logo, categories, description, thumbnail_url, media_count, updated_at)
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, NOW())
+      ON CONFLICT (id) DO UPDATE
+      SET slug = EXCLUDED.slug,
+          name = EXCLUDED.name,
+          logo = EXCLUDED.logo,
+          categories = EXCLUDED.categories,
+          description = EXCLUDED.description,
+          thumbnail_url = EXCLUDED.thumbnail_url,
+          media_count = EXCLUDED.media_count,
+          updated_at = NOW()
+    `,
+    [input.id, input.slug, input.name, input.logo, JSON.stringify(input.categories), input.description, thumbnailUrl, mediaCount]
+  );
+
+  if (!replaceMedia) return;
+
+  await dbClient.query('DELETE FROM client_media WHERE client_id = $1', [input.id]);
+
+  for (const [index, url] of input.images.entries()) {
+    await dbClient.query(
+      'INSERT INTO client_media (client_id, url, type, sort_order) VALUES ($1, $2, $3, $4)',
+      [input.id, url, mediaType(url), index]
+    );
+  }
+}
+
+async function migrateLegacyClients() {
+  const count = await pool.query('SELECT COUNT(*)::int AS count FROM clients');
+  if (count.rows[0]?.count > 0) return;
+
+  const localStoreClients = loadClientsFromLocalStore();
+  let clients = Array.isArray(localStoreClients) ? localStoreClients : [];
+
+  if (clients.length === 0) {
+    const legacy = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
+    if (legacy.rows.length === 0) return;
+    clients = parseJson(legacy.rows[0].value, []);
+  } else {
+    try {
+      const legacy = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
+      const legacyClients = legacy.rows.length > 0 ? parseJson(legacy.rows[0].value, []) : [];
+      if (totalMediaCount(legacyClients) > totalMediaCount(clients)) {
+        clients = legacyClients;
+      }
+    } catch {
+      // Prefer the checked-in local manifest if the legacy key is missing or too slow.
+    }
+  }
+
+  if (!Array.isArray(clients) || clients.length === 0) return;
+
+  await withTransaction(async (dbClient) => {
+    for (const [index, client] of clients.entries()) {
+      await upsertClient(dbClient, normalizeClient(client, Date.now() + index));
+    }
   });
 }
 
-function invalidateCache(key) {
-  if (key) {
-    cache.delete(key);
-  } else {
-    cache.clear();
-  }
-}
+async function initializeDatabase() {
+  if (!pool) return;
 
-// Database query wrapper with fallback
-async function dbQuery(text, params) {
-  if (useLocalFallback) throw new Error('Using local fallback (DB unreachable)');
-  return pool.query(text, params);
-}
-
-// Test DB connection on startup
-(async () => {
   try {
-    console.log('🔌 Connecting to database...');
-    console.log('   DATABASE_URL set:', !!process.env.DATABASE_URL);
-    console.log('   RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT || 'not set');
     await pool.query('SELECT 1');
-    console.log('✅ Database connected successfully');
-  } catch (err) {
-    useLocalFallback = true;
-    console.log('⚠️  Database unreachable — using in-memory fallback');
-    console.log('   Error:', err.message);
+    await ensureSchema();
+    await migrateLegacyClients();
+    databaseReady = true;
+    databaseError = null;
+    console.log('Database ready');
+  } catch (error) {
+    databaseReady = false;
+    databaseError = error.message;
+    console.warn('Database initialization failed:', error.message);
   }
-})();
+}
 
-// Compression middleware for large responses
-app.use((req, res, next) => {
-  const acceptEncoding = req.headers['accept-encoding'] || '';
-  if (acceptEncoding.includes('gzip')) {
-    res.setHeader('Content-Encoding', 'gzip');
-    const gzip = zlib.createGzip({ level: 6 });
-    const originalSend = res.send.bind(res);
-    res.send = (chunk) => {
-      if (typeof chunk === 'string' || Buffer.isBuffer(chunk)) {
-        const chunks = [];
-        gzip.on('data', (d) => chunks.push(d));
-        gzip.on('end', () => {
-          const compressed = Buffer.concat(chunks);
-          res.setHeader('Content-Length', compressed.length);
-          originalSend(compressed);
-        });
-        gzip.write(chunk);
-        gzip.end();
-      } else {
-        originalSend(chunk);
-      }
-    };
+function requireDatabase(res) {
+  if (pool && databaseReady) return true;
+  res.status(503).json({ error: 'Database unavailable', details: databaseError });
+  return false;
+}
+
+async function getAdminValue(key, fallback = null) {
+  const cacheKey = `admin:${key}`;
+  const cached = getCache(cacheKey);
+  if (cached !== null) return cached;
+
+  const result = await dbQuery('SELECT value FROM admin_data WHERE key = $1', [key]);
+  const value = result.rows.length > 0 ? parseJson(result.rows[0].value, fallback) : fallback;
+  setCache(cacheKey, value);
+  return value;
+}
+
+async function getAdminValues(entries) {
+  const items = Array.isArray(entries) ? entries : [];
+  if (items.length === 0) return {};
+
+  const result = {};
+  const missing = [];
+
+  for (const entry of items) {
+    const cacheKey = `admin:${entry.key}`;
+    const cached = getCache(cacheKey);
+    if (cached !== null) {
+      result[entry.key] = cached;
+      continue;
+    }
+
+    missing.push(entry);
   }
+
+  if (missing.length > 0) {
+    const keys = missing.map((entry) => entry.key);
+    const rows = await dbQuery(
+      'SELECT key, value FROM admin_data WHERE key = ANY($1::text[])',
+      [keys]
+    );
+    const rowMap = new Map(rows.rows.map((row) => [row.key, row.value]));
+
+    for (const entry of missing) {
+      const value = rowMap.has(entry.key)
+        ? parseJson(rowMap.get(entry.key), entry.fallback)
+        : entry.fallback;
+      result[entry.key] = value;
+      setCache(`admin:${entry.key}`, value);
+    }
+  }
+
+  return result;
+}
+
+async function setAdminValue(key, value) {
+  await dbQuery(
+    `
+      INSERT INTO admin_data(key, value)
+      VALUES ($1, $2)
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `,
+    [key, JSON.stringify(value)]
+  );
+  clearCache();
+}
+
+async function listClients(options = {}) {
+  const search = text(options.search);
+  const category = text(options.category);
+  const includeMedia = Boolean(options.includeMedia);
+  const page = Number.isFinite(options.page) ? options.page : 1;
+  const limit = Number.isFinite(options.limit) ? options.limit : undefined;
+  const cacheKey = `clients:${search}:${category}:${page}:${limit || 'all'}:${includeMedia ? 'full' : 'summary'}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
+  const filters = [];
+  const values = [];
+
+  if (search) {
+    values.push(`%${search}%`);
+    filters.push(`name ILIKE $${values.length}`);
+  }
+
+  if (category && category !== 'All') {
+    values.push(category);
+    filters.push(`categories ? $${values.length}`);
+  }
+
+  const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+  const canLoadAllRowsDirectly = !search && !category && !includeMedia && !limit && page === 1;
+  let total = 0;
+  let safeLimit = 1;
+  let rows;
+
+  if (canLoadAllRowsDirectly) {
+    rows = await dbQuery(
+      `
+        SELECT id, slug, name, logo, categories, description, thumbnail_url, media_count
+        FROM clients
+        ORDER BY name ASC
+      `
+    );
+    total = rows.rows.length;
+    safeLimit = Math.max(total, 1);
+  } else {
+    const countResult = await dbQuery(`SELECT COUNT(*)::int AS total FROM clients ${where}`, values);
+    total = countResult.rows[0]?.total || 0;
+    safeLimit = limit || Math.max(total, 1);
+    const offset = (page - 1) * safeLimit;
+    const rowValues = [...values, safeLimit, offset];
+    rows = await dbQuery(
+      `
+        SELECT id, slug, name, logo, categories, description, thumbnail_url, media_count
+        FROM clients
+        ${where}
+        ORDER BY name ASC
+        LIMIT $${rowValues.length - 1} OFFSET $${rowValues.length}
+      `,
+      rowValues
+    );
+  }
+
+  let mediaByClient = new Map();
+
+  if (includeMedia && rows.rows.length > 0) {
+    const ids = rows.rows.map((row) => row.id);
+    const placeholders = ids.map((_, index) => `$${index + 1}`).join(', ');
+    const media = await dbQuery(
+      `
+        SELECT id, client_id, url, type, sort_order
+        FROM client_media
+        WHERE client_id IN (${placeholders})
+        ORDER BY client_id ASC, sort_order ASC, id ASC
+      `,
+      ids
+    );
+
+    mediaByClient = media.rows.reduce((map, row) => {
+      const key = String(row.client_id);
+      const items = map.get(key) || [];
+      items.push({
+        id: Number(row.id),
+        url: mediaUrl(row.url),
+        type: row.type || mediaType(row.url),
+        sortOrder: Number(row.sort_order || 0),
+      });
+      map.set(key, items);
+      return map;
+    }, new Map());
+  }
+
+  const clients = rows.rows.map((row) => {
+    if (!includeMedia) {
+      return serializeClient(
+        {
+          ...row,
+          logo: text(row.logo).startsWith('data:') ? '' : row.logo,
+          thumbnail_url: text(row.thumbnail_url).startsWith('data:') ? '' : row.thumbnail_url,
+        },
+        null
+      );
+    }
+
+    return serializeClient(row, mediaByClient.get(String(row.id)) || []);
+  });
+
+  const result = {
+    clients,
+    pagination: {
+      page,
+      limit: safeLimit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+    },
+    source: 'database',
+  };
+
+  setCache(cacheKey, result);
+  return result;
+}
+
+async function getClientById(clientId, includeMedia = false) {
+  const row = await dbQuery(
+    `
+      SELECT id, slug, name, logo, categories, description, thumbnail_url, media_count
+      FROM clients
+      WHERE id = $1
+    `,
+    [clientId]
+  );
+
+  if (row.rows.length === 0) return null;
+
+  if (!includeMedia) return serializeClient(row.rows[0], null);
+
+  const media = await dbQuery(
+    `
+      SELECT id, url, type, sort_order
+      FROM client_media
+      WHERE client_id = $1
+      ORDER BY sort_order ASC, id ASC
+    `,
+    [clientId]
+  );
+
+  return serializeClient(
+    row.rows[0],
+    media.rows.map((item) => ({
+      id: Number(item.id),
+      url: mediaUrl(item.url),
+      type: item.type || mediaType(item.url),
+      sortOrder: Number(item.sort_order || 0),
+    }))
+  );
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const folder = buildUploadFolder(req.body?.clientFolder || 'misc');
+    const uploadPath = path.join(mediaStoragePath, folder);
+    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, safeUploadFileName(file.originalname));
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 500 * 1024 * 1024 },
+});
+
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+app.use((req, res, next) => {
+  res.vary('Accept-Encoding');
   next();
 });
-
-// Cache headers helper
-function setCacheHeaders(res, maxAge = 300) {
-  res.setHeader('Cache-Control', `public, max-age=${maxAge}`);
-  res.setHeader('X-Cache-Status', 'MISS');
+app.use(express.static(distPath, {
+  maxAge: '1h',
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate, no-transform');
+      res.removeHeader('Content-Encoding');
+    }
+  },
+}));
+app.use('/public', express.static(publicPath, { maxAge: '7d' }));
+app.use('/clients', express.static(mediaStoragePath, {
+  maxAge: '30d',
+  setHeaders(res, filePath) {
+    res.setHeader('Cache-Control', /\.(mp4|webm|mov)$/i.test(filePath)
+      ? 'public, max-age=604800'
+      : 'public, max-age=2592000');
+    res.setHeader('Accept-Ranges', 'bytes');
+  },
+}));
+if (mediaStoragePath !== repoClientsPath) {
+  app.use('/clients', express.static(repoClientsPath, {
+    maxAge: '30d',
+    setHeaders(res, filePath) {
+      res.setHeader('Cache-Control', /\.(mp4|webm|mov)$/i.test(filePath)
+        ? 'public, max-age=604800'
+        : 'public, max-age=2592000');
+      res.setHeader('Accept-Ranges', 'bytes');
+    },
+  }));
 }
+app.use('/clients', (req, res) => {
+  res.status(404).end();
+});
 
-// --- API endpoints for admin data ---
-
-// Health check
 app.get('/api/health', async (req, res) => {
   const diagnostics = {
-    DATABASE_URL_set: !!process.env.DATABASE_URL,
-    RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT || 'not set',
-    usingFallback: useLocalFallback,
-    cacheSize: cache.size,
+    databaseConfigured: !!pool,
+    databaseReady,
+    cacheEntries: cache.size,
+    railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'not set',
+    localFallbackEnabled: enableLocalContentFallback,
   };
-  if (useLocalFallback) {
+
+  if (canUseLocalContentFallback()) {
     return res.json({
       status: 'ok',
-      database: 'unreachable (using local fallback)',
-      storedKeys: Object.keys(localStore),
+      database: pool ? 'unavailable' : 'not configured',
+      source: 'local-fallback',
       diagnostics,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
+
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', database: 'connected', diagnostics, timestamp: new Date().toISOString() });
-  } catch (err) {
-    res.json({ status: 'error', database: 'unreachable', error: err.message, diagnostics, timestamp: new Date().toISOString() });
+    res.json({
+      status: databaseReady ? 'ok' : 'degraded',
+      database: databaseReady ? 'connected' : 'starting',
+      diagnostics: { ...diagnostics, reason: databaseError },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      database: 'unreachable',
+      error: error.message,
+      diagnostics,
+      timestamp: new Date().toISOString(),
+    });
   }
 });
 
-// Save admin data (invalidates cache)
+app.get('/api/home-data', async (req, res) => {
+  if (canUseLocalContentFallback()) {
+    const cached = getCache('home-data:local');
+    if (cached) {
+      res.setHeader('X-Cache-Status', 'HIT');
+      setApiCache(res, 120);
+      return res.json(cached);
+    }
+
+    const clients = listLocalClients();
+    const response = {
+      personalData: getLocalAdminValue('personalData', {}),
+      bioContent: getLocalAdminValue('bioContent', {}),
+      siteText: getLocalAdminValue('siteText', {}),
+      latestWorkPosts: getLocalAdminValue('latestWorkPosts', []),
+      clients: clients.clients,
+      clientsPagination: clients.pagination,
+      source: 'local-fallback',
+    };
+
+    setCache('home-data:local', response);
+    setApiCache(res, 120);
+    return res.json(response);
+  }
+  if (!requireDatabase(res)) return;
+
+  try {
+    const cached = getCache('home-data');
+    if (cached) {
+      res.setHeader('X-Cache-Status', 'HIT');
+      setApiCache(res, 120);
+      return res.json(cached);
+    }
+
+    const [adminValues, clients] = await Promise.all([
+      getAdminValues([
+        { key: 'personalData', fallback: {} },
+        { key: 'bioContent', fallback: {} },
+        { key: 'siteText', fallback: {} },
+        { key: 'latestWorkPosts', fallback: [] },
+      ]),
+      listClients(),
+    ]);
+
+    const response = {
+      personalData: adminValues.personalData || {},
+      bioContent: adminValues.bioContent || {},
+      siteText: adminValues.siteText || {},
+      latestWorkPosts: adminValues.latestWorkPosts || [],
+      clients: clients.clients,
+      clientsPagination: clients.pagination,
+      source: 'database',
+    };
+
+    setCache('home-data', response);
+    setApiCache(res, 120);
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/admin-data', async (req, res) => {
   const { key, value } = req.body;
-  if (!key || !value) return res.status(400).json({ error: 'Missing key or value' });
+  if (!key || value === undefined) {
+    return res.status(400).json({ error: 'Missing key or value' });
+  }
+  if (!requireDatabase(res)) return;
+
   try {
-    if (useLocalFallback) {
-      localStore[key] = JSON.stringify(value);
-      invalidateCache(key);
-      return res.json({ success: true, source: 'local-fallback' });
-    }
-    await pool.query(
-      'INSERT INTO admin_data(key, value) VALUES($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
-      [key, JSON.stringify(value)]
-    );
-    invalidateCache(key);
+    await setAdminValue(key, value);
     res.json({ success: true, source: 'database' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// List all admin data
 app.get('/api/admin-data', async (req, res) => {
+  if (canUseLocalContentFallback()) {
+    const response = { source: 'local-fallback', data: localContent };
+    setApiCache(res, 60);
+    return res.json(response);
+  }
+  if (!requireDatabase(res)) return;
+
   try {
     const cached = getCache('all-admin-data');
     if (cached) {
       res.setHeader('X-Cache-Status', 'HIT');
+      setApiCache(res, 60);
       return res.json(cached);
     }
 
-    if (useLocalFallback) {
-      const data = {};
-      Object.entries(localStore).forEach(([k, v]) => {
-        try { data[k] = JSON.parse(v); } catch { data[k] = v; }
-      });
-      const result = { source: 'local-fallback', data };
-      setCache('all-admin-data', result);
-      return res.json(result);
-    }
+    const result = await dbQuery('SELECT key, value FROM admin_data ORDER BY key');
+    const data = result.rows.reduce((acc, row) => {
+      acc[row.key] = parseJson(row.value, row.value);
+      return acc;
+    }, {});
 
-    const result = await pool.query('SELECT key, value FROM admin_data');
-    const data = {};
-    result.rows.forEach(row => {
-      try { data[row.key] = JSON.parse(row.value); } catch { data[row.key] = row.value; }
-    });
     const response = { source: 'database', data };
     setCache('all-admin-data', response);
+    setApiCache(res, 60);
     res.json(response);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// List all admin data as raw rows
 app.get('/api/admin-data/all', async (req, res) => {
+  if (canUseLocalContentFallback()) {
+    const rows = Object.entries(localContent).map(([key, value]) => ({
+      key,
+      value: JSON.stringify(value),
+    }));
+    return res.json({ source: 'local-fallback', rows });
+  }
+  if (!requireDatabase(res)) return;
+
   try {
-    if (useLocalFallback) {
-      const rows = Object.entries(localStore).map(([key, value]) => ({ key, value }));
-      return res.json({ source: 'local-fallback', rows });
-    }
-    const result = await pool.query('SELECT key, value FROM admin_data ORDER BY key');
+    const result = await dbQuery('SELECT key, value FROM admin_data ORDER BY key');
     res.json({ source: 'database', rows: result.rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Load admin data by key (with caching)
 app.get('/api/admin-data/:key', async (req, res) => {
-  const { key } = req.params;
-  const cacheKey = `admin-data-${key}`;
-  
+  if (canUseLocalContentFallback()) {
+    const value = getLocalAdminValue(req.params.key, null);
+    if (value === null) return res.status(404).json({ error: 'Not found' });
+    setApiCache(res, 120);
+    return res.json({ value, source: 'local-fallback' });
+  }
+  if (!requireDatabase(res)) return;
+
   try {
+    const value = await getAdminValue(req.params.key, null);
+    if (value === null) return res.status(404).json({ error: 'Not found' });
+    setApiCache(res, 120);
+    res.json({ value, source: 'database' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/clients', async (req, res) => {
+  if (canUseLocalContentFallback()) {
+    const includeMedia = String(req.query.includeMedia || '').toLowerCase() === 'true';
+    const page = Number.isFinite(Number(req.query.page)) ? Number(req.query.page) : 1;
+    const limit = Number.isFinite(Number(req.query.limit)) ? Number(req.query.limit) : undefined;
+    const response = listLocalClients({
+      page,
+      limit,
+      search: req.query.search,
+      category: req.query.category,
+      includeMedia,
+    });
+    setApiCache(res, includeMedia ? 30 : 120);
+    return res.json(response);
+  }
+  if (!requireDatabase(res)) return;
+
+  try {
+    const includeMedia = String(req.query.includeMedia || '').toLowerCase() === 'true';
+    const page = Number.isFinite(Number(req.query.page)) ? Number(req.query.page) : 1;
+    const limit = Number.isFinite(Number(req.query.limit)) ? Number(req.query.limit) : undefined;
+    const response = await listClients({
+      page,
+      limit,
+      search: req.query.search,
+      category: req.query.category,
+      includeMedia,
+    });
+    setApiCache(res, includeMedia ? 30 : 120);
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/clients/:id', async (req, res) => {
+  if (canUseLocalContentFallback()) {
+    const clientId = Number(req.params.id);
+    if (!Number.isSafeInteger(clientId)) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+
+    const includeMedia = String(req.query.includeMedia || '').toLowerCase() === 'true';
+    const client = getLocalClientById(clientId, includeMedia);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    setApiCache(res, includeMedia ? 30 : 120);
+    return res.json({ client, source: 'local-fallback' });
+  }
+  if (!requireDatabase(res)) return;
+
+  try {
+    const clientId = Number(req.params.id);
+    if (!Number.isSafeInteger(clientId)) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+
+    const includeMedia = String(req.query.includeMedia || '').toLowerCase() === 'true';
+    const client = await getClientById(clientId, includeMedia);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    setApiCache(res, includeMedia ? 30 : 120);
+    res.json({ client, source: 'database' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/clients/:id/media', async (req, res) => {
+  if (canUseLocalContentFallback()) {
+    const clientId = Number(req.params.id);
+    if (!Number.isSafeInteger(clientId)) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+
+    const client = getLocalClientById(clientId, true);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    const response = {
+      clientId,
+      media: Array.isArray(client.media) ? client.media : [],
+      source: 'local-fallback',
+    };
+    setApiCache(res, 30);
+    return res.json(response);
+  }
+  if (!requireDatabase(res)) return;
+
+  try {
+    const clientId = Number(req.params.id);
+    if (!Number.isSafeInteger(clientId)) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+
+    const cacheKey = `client-media:${clientId}`;
     const cached = getCache(cacheKey);
     if (cached) {
       res.setHeader('X-Cache-Status', 'HIT');
+      setApiCache(res, 60);
       return res.json(cached);
     }
 
-    if (useLocalFallback) {
-      if (!localStore[key]) return res.status(404).json({ error: 'Not found', source: 'local-fallback' });
-      const result = { value: JSON.parse(localStore[key]), source: 'local-fallback' };
-      setCache(cacheKey, result);
-      return res.json(result);
-    }
+    const client = await getClientById(clientId, true);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
 
-    const result = await pool.query('SELECT value FROM admin_data WHERE key = $1', [key]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    const response = { value: JSON.parse(result.rows[0].value), source: 'database' };
+    const response = {
+      clientId,
+      media: client.media || [],
+      images: client.images || [],
+      count: Number(client.mediaCount || 0),
+      source: 'database',
+    };
+
     setCache(cacheKey, response);
+    setApiCache(res, 60);
     res.json(response);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// --- Clients API endpoints (with caching) ---
-
-// Get all clients
-app.get('/api/clients', async (req, res) => {
-  try {
-    const cached = getCache('clients');
-    if (cached) {
-      res.setHeader('X-Cache-Status', 'HIT');
-      return res.json(cached);
-    }
-
-    if (useLocalFallback) {
-      const raw = localStore['clients'];
-      const result = { clients: raw ? JSON.parse(raw) : [], source: 'local-fallback' };
-      setCache('clients', result);
-      return res.json(result);
-    }
-
-    const result = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
-    if (result.rows.length === 0) {
-      const response = { clients: [], source: 'database' };
-      setCache('clients', response);
-      return res.json(response);
-    }
-    const response = { clients: JSON.parse(result.rows[0].value), source: 'database' };
-    setCache('clients', response);
-    res.json(response);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Save all clients (replace entire list) - invalidates cache
 app.post('/api/clients', async (req, res) => {
   const { clients } = req.body;
-  if (!Array.isArray(clients)) return res.status(400).json({ error: 'clients must be an array' });
+  if (!Array.isArray(clients)) {
+    return res.status(400).json({ error: 'clients must be an array' });
+  }
+  if (clients.length === 0) {
+    return res.status(400).json({ error: 'Refusing to replace clients with an empty array' });
+  }
+  if (!requireDatabase(res)) return;
+
   try {
-    const value = JSON.stringify(clients);
-    if (useLocalFallback) {
-      localStore['clients'] = value;
-      invalidateCache('clients');
-      return res.json({ success: true, count: clients.length, source: 'local-fallback' });
-    }
-    await pool.query(
-      "INSERT INTO admin_data(key, value) VALUES('clients', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
-      [value]
-    );
-    invalidateCache('clients');
+    await withTransaction(async (dbClient) => {
+      await dbClient.query('DELETE FROM client_media');
+      await dbClient.query('DELETE FROM clients');
+
+      for (const [index, client] of clients.entries()) {
+        await upsertClient(dbClient, normalizeClient(client, Date.now() + index));
+      }
+    });
+
+    clearCache();
     res.json({ success: true, count: clients.length, source: 'database' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Add a single client - invalidates cache
 app.post('/api/clients/add', async (req, res) => {
-  const client = req.body;
-  if (!client.name) return res.status(400).json({ error: 'Client name is required' });
+  if (!requireDatabase(res)) return;
+
   try {
-    let clients = [];
-    if (useLocalFallback) {
-      const raw = localStore['clients'];
-      if (raw) clients = JSON.parse(raw);
-    } else {
-      const result = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
-      if (result.rows.length > 0) clients = JSON.parse(result.rows[0].value);
-    }
-    const newClient = { id: Date.now(), ...client };
-    clients.push(newClient);
-    const value = JSON.stringify(clients);
-    if (useLocalFallback) {
-      localStore['clients'] = value;
-    } else {
-      await pool.query(
-        "INSERT INTO admin_data(key, value) VALUES('clients', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
-        [value]
-      );
-    }
-    invalidateCache('clients');
-    res.json({ success: true, client: newClient, totalClients: clients.length, source: useLocalFallback ? 'local-fallback' : 'database' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const prepared = normalizeClient(req.body, Date.now());
+    await withTransaction(async (dbClient) => upsertClient(dbClient, prepared));
+    clearCache();
+    res.json({ success: true, client: await getClientById(prepared.id, true), source: 'database' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Update a client by id - invalidates cache
 app.put('/api/clients/:id', async (req, res) => {
-  const clientId = parseInt(req.params.id);
-  const updatedClient = req.body;
+  if (!requireDatabase(res)) return;
+
   try {
-    let clients = [];
-    if (useLocalFallback) {
-      const raw = localStore['clients'];
-      if (raw) clients = JSON.parse(raw);
-    } else {
-      const result = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
-      if (result.rows.length > 0) clients = JSON.parse(result.rows[0].value);
+    const clientId = Number(req.params.id);
+    if (!Number.isSafeInteger(clientId)) {
+      return res.status(400).json({ error: 'Invalid client id' });
     }
-    const clientIndex = clients.findIndex(c => c.id === clientId);
-    if (clientIndex === -1) {
-      return res.status(404).json({ success: false, error: 'Client not found' });
-    }
-    clients[clientIndex] = { ...clients[clientIndex], ...updatedClient };
-    const value = JSON.stringify(clients);
-    if (useLocalFallback) {
-      localStore['clients'] = value;
-    } else {
-      await pool.query(
-        "INSERT INTO admin_data(key, value) VALUES('clients', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
-        [value]
-      );
-    }
-    invalidateCache('clients');
-    res.json({ success: true, client: clients[clientIndex], source: useLocalFallback ? 'local-fallback' : 'database' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+
+    const existing = await getClientById(clientId, true);
+    if (!existing) return res.status(404).json({ error: 'Client not found' });
+
+    const prepared = normalizeClient(
+      {
+        ...existing,
+        ...req.body,
+        id: clientId,
+        images: Array.isArray(req.body.images) ? req.body.images : existing.images || [],
+      },
+      clientId
+    );
+
+    await withTransaction(async (dbClient) => upsertClient(dbClient, prepared));
+    clearCache();
+    res.json({ success: true, client: await getClientById(clientId, true), source: 'database' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Delete a client by id - invalidates cache
 app.delete('/api/clients/:id', async (req, res) => {
-  const clientId = parseInt(req.params.id);
+  if (!requireDatabase(res)) return;
+
   try {
-    let clients = [];
-    if (useLocalFallback) {
-      const raw = localStore['clients'];
-      if (raw) clients = JSON.parse(raw);
-    } else {
-      const result = await pool.query("SELECT value FROM admin_data WHERE key = 'clients'");
-      if (result.rows.length > 0) clients = JSON.parse(result.rows[0].value);
+    const clientId = Number(req.params.id);
+    if (!Number.isSafeInteger(clientId)) {
+      return res.status(400).json({ error: 'Invalid client id' });
     }
-    const before = clients.length;
-    clients = clients.filter(c => c.id !== clientId);
-    const value = JSON.stringify(clients);
-    if (useLocalFallback) {
-      localStore['clients'] = value;
-    } else {
-      await pool.query(
-        "INSERT INTO admin_data(key, value) VALUES('clients', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
-        [value]
-      );
-    }
-    invalidateCache('clients');
-    res.json({ success: true, deleted: before - clients.length, remaining: clients.length, source: useLocalFallback ? 'local-fallback' : 'database' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+
+    const result = await dbQuery('DELETE FROM clients WHERE id = $1', [clientId]);
+    clearCache();
+    res.json({ success: true, deleted: result.rowCount, source: 'database' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// ========== MEDIA UPLOAD ENDPOINTS ==========
 app.post('/api/media/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
 
-    const clientFolder = req.body.clientFolder || 'unknown';
-    const fileUrl = `/clients/${clientFolder}/${req.file.filename}`;
-
+    const folder = buildMediaRoute(req.body.clientFolder || 'misc');
     res.json({
       success: true,
-      url: fileUrl,
+      url: mediaUrl(`/clients/${folder}/${req.file.filename}`),
       path: req.file.path,
       filename: req.file.filename,
-      size: req.file.size
+      size: req.file.size,
+      type: mediaType(req.file.filename),
     });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -444,27 +1164,46 @@ app.post('/api/media/upload-multiple', upload.array('files', 50), async (req, re
       return res.status(400).json({ success: false, error: 'No files uploaded' });
     }
 
-    const clientFolder = req.body.clientFolder || 'unknown';
-    const results = req.files.map(file => ({
-      url: `/clients/${clientFolder}/${file.filename}`,
+    const folder = buildMediaRoute(req.body.clientFolder || 'misc');
+    const files = req.files.map((file) => ({
+      url: mediaUrl(`/clients/${folder}/${file.filename}`),
       filename: file.filename,
-      size: file.size
+      size: file.size,
+      type: mediaType(file.filename),
     }));
 
-    res.json({
-      success: true,
-      files: results,
-      count: results.length
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, files, count: files.length });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Fallback for React Router
 app.use((req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate, no-transform');
+  res.vary('Accept-Encoding');
+  res.removeHeader('Content-Encoding');
   res.sendFile(path.join(distPath, 'index.html'));
 });
+
+initializeDatabase().catch((error) => {
+  databaseError = error.message;
+  console.warn('Database startup failed:', error.message);
+});
+
+if (pool && typeof pool.on === 'function') {
+  pool.on('error', (error) => {
+    databaseReady = false;
+    databaseError = error.message;
+  });
+}
+
+setInterval(() => {
+  if (pool && !databaseReady) {
+    initializeDatabase().catch((error) => {
+      databaseError = error.message;
+    });
+  }
+}, 30000).unref();
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);

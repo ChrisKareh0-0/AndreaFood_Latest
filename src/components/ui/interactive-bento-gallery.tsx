@@ -5,6 +5,16 @@ import { X } from 'lucide-react';
 
 
 // MediaItemType defines the structure of a media item
+interface SourceClientType {
+    id: number;
+    name?: string;
+    logo?: string;
+    thumbnailUrl?: string;
+    images?: string[];
+    categories?: string[];
+    description?: string;
+}
+
 interface MediaItemType {
     id: number;
     type: 'image' | 'video';
@@ -14,7 +24,41 @@ interface MediaItemType {
     span: string;
     categories?: string[];
     allImages?: string[];
+    sourceClient?: SourceClientType;
 }
+
+const isVideoUrl = (url?: string): boolean => {
+    return !!url && (url.startsWith('data:video/') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov'));
+};
+
+const getVideoMimeType = (url?: string): string => {
+    if (!url) return 'video/mp4';
+    if (url.startsWith('data:video/webm')) return 'video/webm';
+    if (url.startsWith('data:video/quicktime') || url.startsWith('data:video/mov')) return 'video/quicktime';
+    if (url.startsWith('data:video/')) return 'video/mp4';
+    if (url.endsWith('.webm')) return 'video/webm';
+    if (url.endsWith('.mov')) return 'video/quicktime';
+    return 'video/mp4';
+};
+
+const resolveClientImages = (item?: MediaItemType | null): string[] => {
+    if (!item) return [];
+
+    const directImages = Array.isArray(item.allImages) ? item.allImages : [];
+    if (directImages.length > 0) {
+        return directImages.filter(Boolean);
+    }
+
+    const sourceClientImages = Array.isArray(item.sourceClient?.images) ? item.sourceClient?.images : [];
+    const merged = [
+        ...sourceClientImages,
+        ...(item.sourceClient?.logo ? [item.sourceClient.logo] : []),
+        ...(item.sourceClient?.thumbnailUrl ? [item.sourceClient.thumbnailUrl] : []),
+        ...(item.url ? [item.url] : []),
+    ].filter(Boolean) as string[];
+
+    return Array.from(new Set(merged));
+};
 // MediaItem component renders either a video or image based on item.type
 const MediaItem = ({ item, className, onClick, videoRef }: { 
     item: MediaItemType, 
@@ -28,11 +72,6 @@ const MediaItem = ({ item, className, onClick, videoRef }: {
     const [isBuffering, setIsBuffering] = useState(true);  // To track if video is buffering
     const [imgError, setImgError] = useState(false); // Track image load errors
     const [videoError, setVideoError] = useState(false); // Track video load errors
-
-    // Helper to check if URL is a video
-    const isVideoUrl = (url: string): boolean => {
-        return url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov');
-    };
 
     // Default background for dark mode
     const defaultBg = '#1a1a2e';
@@ -129,7 +168,7 @@ const MediaItem = ({ item, className, onClick, videoRef }: {
                     playsInline
                     muted
                     loop
-                    preload="auto"
+                    preload={isInView ? 'metadata' : 'none'}
                     onError={() => {
                         console.warn('Video failed to load:', item.url?.substring(0, 50));
                         setVideoError(true);
@@ -141,7 +180,7 @@ const MediaItem = ({ item, className, onClick, videoRef }: {
                         willChange: 'transform',
                     }}
                 >
-                    <source src={item.url} type="video/mp4" />
+                    <source src={item.url} type={getVideoMimeType(item.url)} />
                 </video>
                 {isBuffering && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/10">
@@ -177,12 +216,9 @@ const MediaItem = ({ item, className, onClick, videoRef }: {
                     className="w-full h-full object-cover"
                     loading="lazy"
                     decoding="async"
-                    onError={(e) => {
+                    onError={() => {
                         console.warn('Image failed to load:', item.url?.substring(0, 50));
                         setImgError(true);
-                    }}
-                    onLoad={() => {
-                        console.log('Image loaded:', item.title);
                     }}
                 />
             )}
@@ -197,32 +233,29 @@ interface GalleryModalProps {
     selectedItem: MediaItemType;
     isOpen: boolean;
     onClose: () => void;
-    setSelectedItem: (item: MediaItemType | null) => void;
-    mediaItems: MediaItemType[]; // List of media items to display in the modal
 }
-const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaItems }: GalleryModalProps) => {
+const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
     const [dockPosition, setDockPosition] = useState({ x: 0, y: 0 });
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
 
     // Get all images for the selected client (from allImages array or single url)
-    const clientImages = selectedItem?.allImages && selectedItem.allImages.length > 0
-        ? selectedItem.allImages
-        : [selectedItem?.url].filter(Boolean);
+    const clientImages = resolveClientImages(selectedItem);
+
+    useEffect(() => {
+        setCurrentImageIndex(0);
+    }, [selectedItem?.id]);
 
     if (!isOpen || !selectedItem) return null;
 
     const currentImage = clientImages[currentImageIndex];
-    const isCurrentVideo = currentImage?.endsWith('.mp4') ||
-                          currentImage?.endsWith('.webm') ||
-                          currentImage?.endsWith('.mov') ||
-                          selectedItem.categories?.includes('TVC');
+    const isCurrentVideo = isVideoUrl(currentImage);
 
     const currentItem = {
         ...selectedItem,
         url: currentImage,
-        type: isCurrentVideo ? 'video' : 'image' as 'video' | 'image'
+        type: isCurrentVideo ? 'video' : 'image'
     };
 
     // Toggle fullscreen
@@ -236,8 +269,8 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
                 await document.exitFullscreen();
                 setIsFullscreen(false);
             }
-        } catch (err) {
-            console.error('Fullscreen error:', err);
+        } catch {
+            // Ignore fullscreen failures and keep the modal usable.
         }
     };
 
@@ -255,7 +288,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
     // Auto-play video when entering fullscreen
     useEffect(() => {
         if (isFullscreen && isCurrentVideo && videoRef.current) {
-            videoRef.current.play().catch(console.warn);
+            videoRef.current.play().catch(() => {});
         }
     }, [isFullscreen, isCurrentVideo]);
 
@@ -425,7 +458,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose, setSelectedItem, mediaIte
                 >
                     <div className="flex items-center -space-x-2 px-3 py-2">
                         {clientImages.map((imgUrl, index) => {
-                            const thumbItem = { ...selectedItem, url: imgUrl };
+                            const thumbItem = { ...selectedItem, url: imgUrl, type: isVideoUrl(imgUrl) ? 'video' : 'image' };
                             return (
                                 <motion.div
                                     key={index}
@@ -490,8 +523,60 @@ interface InteractiveBentoGalleryProps {
 
 const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({ mediaItems, title, description, showTitle = true }) => {
     const [selectedItem, setSelectedItem] = useState<MediaItemType | null>(null);
-    const [items, setItems] = useState(mediaItems);
-    const [isDragging, setIsDragging] = useState(false);
+    const items = mediaItems;
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadSelectedMedia = async () => {
+            if (!selectedItem) return;
+
+            const existingImages = Array.isArray(selectedItem.allImages)
+                ? selectedItem.allImages
+                : Array.isArray(selectedItem.sourceClient?.images)
+                    ? selectedItem.sourceClient.images
+                    : [];
+
+            if (existingImages.length > 0) return;
+
+            try {
+                const response = await fetch(`/api/clients/${selectedItem.id}/media`);
+                if (!response.ok) return;
+
+                const payload = await response.json();
+                const images = Array.isArray(payload.images)
+                    ? payload.images
+                    : Array.isArray(payload.media)
+                        ? payload.media.map((item: { url?: string }) => item.url).filter(Boolean)
+                        : [];
+
+                if (cancelled || images.length === 0) return;
+
+                setSelectedItem((current) => {
+                    if (!current || current.id !== selectedItem.id) {
+                        return current;
+                    }
+
+                    return {
+                        ...current,
+                        allImages: images,
+                        sourceClient: {
+                            ...current.sourceClient,
+                            images,
+                        },
+                    };
+                });
+            } catch {
+                // Keep the modal usable with the preview item if the media request fails.
+            }
+        };
+
+        loadSelectedMedia();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedItem]);
 
     return (
         <div className="w-full">
@@ -524,8 +609,6 @@ const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({ media
                         selectedItem={selectedItem}
                         isOpen={true}
                         onClose={() => setSelectedItem(null)}
-                        setSelectedItem={setSelectedItem}
-                        mediaItems={items}
                     />
                 ) : (
                     <motion.div
