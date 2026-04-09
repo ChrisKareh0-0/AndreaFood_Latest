@@ -218,6 +218,18 @@
   margin-bottom: 2rem;
 }
 
+.stats-meta {
+  margin: -1rem 0 1.25rem;
+  color: #6b7b8c;
+  font-size: 0.95rem;
+}
+
+.stats-error {
+  margin: -0.25rem 0 0.75rem;
+  color: #b42318;
+  font-weight: 600;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));

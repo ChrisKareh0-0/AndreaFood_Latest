@@ -291,6 +291,53 @@ function totalMediaCount(clients) {
   return clients.reduce((sum, client) => sum + (Array.isArray(client?.images) ? client.images.length : 0), 0);
 }
 
+function buildAdminStatsFromClientPayload(clients) {
+  const rows = Array.isArray(clients) ? clients : [];
+  const categories = new Set();
+  let totalClients = rows.length;
+  let totalImages = 0;
+  let totalVideos = 0;
+  let clientsWithMedia = 0;
+
+  for (const client of rows) {
+    const media = Array.isArray(client?.media)
+      ? client.media
+      : Array.isArray(client?.images)
+        ? client.images.map((url) => ({ url, type: mediaType(url) }))
+        : [];
+
+    if (media.length > 0) {
+      clientsWithMedia += 1;
+    }
+
+    for (const item of media) {
+      if ((item?.type || mediaType(item?.url || '')) === 'video') {
+        totalVideos += 1;
+      } else {
+        totalImages += 1;
+      }
+    }
+
+    const clientCategories = Array.isArray(client?.categories) ? client.categories : [];
+    for (const category of clientCategories) {
+      const value = text(category);
+      if (value) {
+        categories.add(value);
+      }
+    }
+  }
+
+  return {
+    totalClients,
+    clientsWithMedia,
+    clientsWithoutMedia: Math.max(0, totalClients - clientsWithMedia),
+    totalImages,
+    totalVideos,
+    totalMedia: totalImages + totalVideos,
+    totalCategories: categories.size,
+  };
+}
+
 function canUseLocalContentFallback() {
   return enableLocalContentFallback && (!pool || !databaseReady);
 }
@@ -912,6 +959,85 @@ app.get('/api/health', async (req, res) => {
       diagnostics,
       timestamp: new Date().toISOString(),
     });
+  }
+});
+
+app.get('/api/admin/stats', async (req, res) => {
+  if (canUseLocalContentFallback()) {
+    const cacheKey = 'admin-stats:local';
+    const cached = getCache(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache-Status', 'HIT');
+      setApiCache(res, 60);
+      return res.json(cached);
+    }
+
+    const localClients = listLocalClients({ includeMedia: true });
+    const response = {
+      source: 'local-fallback',
+      stats: buildAdminStatsFromClientPayload(localClients.clients),
+      timestamp: new Date().toISOString(),
+    };
+
+    setCache(cacheKey, response, 60 * 1000);
+    setApiCache(res, 60);
+    return res.json(response);
+  }
+  if (!requireDatabase(res)) return;
+
+  try {
+    const cacheKey = 'admin-stats:db';
+    const cached = getCache(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache-Status', 'HIT');
+      setApiCache(res, 60);
+      return res.json(cached);
+    }
+
+    const [clientsCount, mediaCount, categoriesCount, clientsWithMediaCount] = await Promise.all([
+      dbQuery('SELECT COUNT(*)::int AS total FROM clients'),
+      dbQuery(`
+        SELECT
+          COUNT(*)::int AS total_media,
+          COUNT(*) FILTER (WHERE type = 'image')::int AS total_images,
+          COUNT(*) FILTER (WHERE type = 'video')::int AS total_videos
+        FROM client_media
+      `),
+      dbQuery(`
+        SELECT COUNT(DISTINCT category)::int AS total_categories
+        FROM (
+          SELECT jsonb_array_elements_text(categories) AS category
+          FROM clients
+        ) AS category_rows
+      `),
+      dbQuery('SELECT COUNT(*)::int AS total FROM clients WHERE media_count > 0'),
+    ]);
+
+    const totalClients = Number(clientsCount.rows[0]?.total || 0);
+    const totalImages = Number(mediaCount.rows[0]?.total_images || 0);
+    const totalVideos = Number(mediaCount.rows[0]?.total_videos || 0);
+    const totalMedia = Number(mediaCount.rows[0]?.total_media || 0);
+    const clientsWithMedia = Number(clientsWithMediaCount.rows[0]?.total || 0);
+
+    const response = {
+      source: 'database',
+      stats: {
+        totalClients,
+        clientsWithMedia,
+        clientsWithoutMedia: Math.max(0, totalClients - clientsWithMedia),
+        totalImages,
+        totalVideos,
+        totalMedia,
+        totalCategories: Number(categoriesCount.rows[0]?.total_categories || 0),
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    setCache(cacheKey, response, 60 * 1000);
+    setApiCache(res, 60);
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

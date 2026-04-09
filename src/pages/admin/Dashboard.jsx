@@ -12,6 +12,18 @@ import './Dashboard.css'
 
 function Dashboard() {
   const [activeSection, setActiveSection] = useState('overview')
+  const [overviewStats, setOverviewStats] = useState({
+    totalClients: 0,
+    clientsWithMedia: 0,
+    clientsWithoutMedia: 0,
+    totalImages: 0,
+    totalVideos: 0,
+    totalMedia: 0,
+    totalCategories: 0,
+  })
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState('')
+  const [statsUpdatedAt, setStatsUpdatedAt] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -20,6 +32,56 @@ function Dashboard() {
       navigate('/login')
     }
   }, [navigate])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchOverviewStats() {
+      try {
+        if (!cancelled) {
+          setStatsLoading(true)
+          setStatsError('')
+        }
+
+        const res = await fetch('/api/admin/stats')
+        if (!res.ok) {
+          throw new Error(`Failed to load stats (${res.status})`)
+        }
+
+        const data = await res.json()
+        const stats = data?.stats || {}
+
+        if (cancelled) return
+
+        setOverviewStats({
+          totalClients: Number(stats.totalClients || 0),
+          clientsWithMedia: Number(stats.clientsWithMedia || 0),
+          clientsWithoutMedia: Number(stats.clientsWithoutMedia || 0),
+          totalImages: Number(stats.totalImages || 0),
+          totalVideos: Number(stats.totalVideos || 0),
+          totalMedia: Number(stats.totalMedia || 0),
+          totalCategories: Number(stats.totalCategories || 0),
+        })
+        setStatsUpdatedAt(typeof data?.timestamp === 'string' ? data.timestamp : '')
+      } catch (error) {
+        if (!cancelled) {
+          setStatsError(error.message || 'Failed to load overview stats')
+        }
+      } finally {
+        if (!cancelled) {
+          setStatsLoading(false)
+        }
+      }
+    }
+
+    fetchOverviewStats()
+    const interval = setInterval(fetchOverviewStats, 60000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated')
@@ -37,6 +99,17 @@ function Dashboard() {
     { id: 'api-test', label: 'API Test', icon: '🧪' },
     { id: 'clients-api', label: 'Clients API', icon: '🔗' }
   ]
+
+  const statsCards = [
+    { key: 'totalClients', icon: '🤝', label: 'Total Clients', value: overviewStats.totalClients },
+    { key: 'totalMedia', icon: '🗂️', label: 'Total Media Items', value: overviewStats.totalMedia },
+    { key: 'totalImages', icon: '🖼️', label: 'Total Images', value: overviewStats.totalImages },
+    { key: 'totalVideos', icon: '🎬', label: 'Total Videos', value: overviewStats.totalVideos },
+    { key: 'clientsWithMedia', icon: '✅', label: 'Clients With Media', value: overviewStats.clientsWithMedia },
+    { key: 'totalCategories', icon: '🏷️', label: 'Categories', value: overviewStats.totalCategories },
+  ]
+
+  const formatNumber = (value) => Number(value || 0).toLocaleString()
 
   return (
     <div className="admin-dashboard">
@@ -90,35 +163,28 @@ function Dashboard() {
           {activeSection === 'overview' && (
             <div className="overview-section">
               <h2 className="section-title">Welcome to Andrea's Portfolio Admin</h2>
+              {statsError && (
+                <p className="stats-error">
+                  {statsError}
+                </p>
+              )}
+              <p className="stats-meta">
+                {statsLoading
+                  ? 'Refreshing live database stats...'
+                  : statsUpdatedAt
+                    ? `Last updated: ${new Date(statsUpdatedAt).toLocaleString()}`
+                    : 'Live database stats loaded'}
+              </p>
               <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-icon">🖼️</div>
-                  <div className="stat-info">
-                    <h3>Total Pictures</h3>
-                    <p className="stat-number">24</p>
+                {statsCards.map((card) => (
+                  <div className="stat-card" key={card.key}>
+                    <div className="stat-icon">{card.icon}</div>
+                    <div className="stat-info">
+                      <h3>{card.label}</h3>
+                      <p className="stat-number">{formatNumber(card.value)}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">🤝</div>
-                  <div className="stat-info">
-                    <h3>Total Clients</h3>
-                    <p className="stat-number">15</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">🏷️</div>
-                  <div className="stat-info">
-                    <h3>Categories</h3>
-                    <p className="stat-number">8</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">📊</div>
-                  <div className="stat-info">
-                    <h3>Total Projects</h3>
-                    <p className="stat-number">32</p>
-                  </div>
-                </div>
+                ))}
               </div>
               <div className="quick-actions">
                 <h3>Quick Actions</h3>
