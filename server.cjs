@@ -3,6 +3,7 @@ const express = require('express');
 const fs = require('fs');
 const multer = require('multer');
 const path = require('path');
+const sharp = require('sharp');
 const pool = require('./db.cjs');
 
 const app = express();
@@ -21,6 +22,7 @@ const localStorePath = path.join(__dirname, '.local-store.json');
 const mediaBaseUrl = (process.env.MEDIA_BASE_URL || '').replace(/\/$/, '');
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
+const previewJobs = new Map();
 
 let databaseReady = false;
 let databaseError = pool ? null : 'DATABASE_URL is not configured';
@@ -140,6 +142,131 @@ function buildMediaRoute(value) {
 function mediaType(url) {
   if ((url || '').startsWith('data:video/')) return 'video';
   return /\.(mp4|webm|mov)$/i.test(url || '') ? 'video' : 'image';
+}
+
+function numberInRange(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+function normalizeMediaRequestPath(value) {
+  const input = text(value);
+  if (!input || input.startsWith('data:')) return '';
+
+  let pathname = input;
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      pathname = new URL(input).pathname;
+    } catch {
+      return '';
+    }
+  }
+
+  if (!pathname.startsWith('/clients/')) return '';
+
+  return pathname
+    .replace(/^\/clients\//, '')
+    .split('/')
+    .flatMap((part) => part.split('\\'))
+    .map((part) => safePathSegment(part))
+    .filter(Boolean)
+    .join('/');
+}
+
+function getExistingMediaFile(relativeRoute) {
+  if (!relativeRoute) return null;
+
+  const candidates = [
+    path.join(mediaStoragePath, relativeRoute),
+  ];
+
+  if (mediaStoragePath !== repoClientsPath) {
+    candidates.push(path.join(repoClientsPath, relativeRoute));
+  }
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function buildPreviewFileInfo(relativeRoute, width, height, quality) {
+  const parsed = path.parse(relativeRoute);
+  const previewDir = path.join(
+    mediaStoragePath,
+    '__preview__',
+    `w${width || 0}-h${height || 0}-q${quality}`,
+    parsed.dir
+  );
+  const fileName = `${parsed.name}.webp`;
+
+  return {
+    route: `/clients/__preview__/w${width || 0}-h${height || 0}-q${quality}/${[
+      parsed.dir.replace(/\\/g, '/'),
+      fileName,
+    ].filter(Boolean).join('/')}`,
+    path: path.join(previewDir, fileName),
+  };
+}
+
+async function generateImagePreview(sourcePath, targetPath, options) {
+  const { width, height, quality } = options;
+  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+
+  const tempPath = `${targetPath}.${process.pid}.${Date.now()}.tmp.webp`;
+  const transformer = sharp(sourcePath).rotate();
+
+  if (width || height) {
+    transformer.resize({
+      width: width || undefined,
+      height: height || undefined,
+      fit: width && height ? 'cover' : 'inside',
+      position: 'attention',
+      withoutEnlargement: true,
+    });
+  }
+
+  await transformer.webp({ quality, effort: 4 }).toFile(tempPath);
+  await fs.promises.rm(targetPath, { force: true });
+  await fs.promises.rename(tempPath, targetPath);
+}
+
+async function ensureImagePreview(sourceUrl, options = {}) {
+  const relativeRoute = normalizeMediaRequestPath(sourceUrl);
+  if (!relativeRoute || mediaType(relativeRoute) !== 'image') return null;
+
+  const sourcePath = getExistingMediaFile(relativeRoute);
+  if (!sourcePath) return null;
+
+  const width = numberInRange(options.width, 160, 2400, 960);
+  const height = options.height
+    ? numberInRange(options.height, 160, 2400, 0)
+    : 0;
+  const quality = numberInRange(options.quality, 40, 90, 72);
+  const output = buildPreviewFileInfo(relativeRoute, width, height, quality);
+
+  if (fs.existsSync(output.path)) {
+    const [sourceStat, previewStat] = await Promise.all([
+      fs.promises.stat(sourcePath),
+      fs.promises.stat(output.path),
+    ]);
+
+    if (previewStat.mtimeMs >= sourceStat.mtimeMs) {
+      return output;
+    }
+  }
+
+  const jobKey = `${sourcePath}:${output.path}:${width}:${height}:${quality}`;
+  let job = previewJobs.get(jobKey);
+
+  if (!job) {
+    job = generateImagePreview(sourcePath, output.path, { width, height, quality })
+      .finally(() => {
+        previewJobs.delete(jobKey);
+      });
+    previewJobs.set(jobKey, job);
+  }
+
+  await job;
+  return output;
 }
 
 function mediaUrl(url) {
@@ -785,6 +912,25 @@ app.get('/api/health', async (req, res) => {
       diagnostics,
       timestamp: new Date().toISOString(),
     });
+  }
+});
+
+app.get('/api/media/preview', async (req, res) => {
+  try {
+    const preview = await ensureImagePreview(req.query.src, {
+      width: req.query.w,
+      height: req.query.h,
+      quality: req.query.q,
+    });
+
+    if (!preview) {
+      return res.status(404).json({ error: 'Preview source not found' });
+    }
+
+    res.setHeader('Cache-Control', 'public, max-age=2592000, stale-while-revalidate=604800, immutable');
+    res.sendFile(preview.path);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

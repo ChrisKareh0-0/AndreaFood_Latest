@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import InteractiveBentoGallery from "@/components/ui/interactive-bento-gallery"
+import { buildMediaPreviewUrl, isVideoUrl } from "@/lib/mediaPreview"
 
 interface Client {
   id: number
@@ -27,13 +28,6 @@ interface GalleryMediaItem {
 
 interface ClientsGalleryProps {
   clients?: Client[]
-  isReady?: boolean
-}
-
-const isVideoUrl = (url?: string): boolean => {
-  if (!url) return false
-  if (url.startsWith('data:video/')) return true
-  return url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov')
 }
 
 const getClientMediaCandidates = (client?: Client): string[] => {
@@ -48,7 +42,8 @@ const getClientMediaCandidates = (client?: Client): string[] => {
 
 const getPreviewUrl = (client?: Client): string => {
   const media = getClientMediaCandidates(client)
-  return media.find((url) => !isVideoUrl(url)) || media[0] || ''
+  const imageSource = media.find((url) => !isVideoUrl(url)) || ''
+  return buildMediaPreviewUrl(imageSource, { width: 720, height: 720, quality: 68 }) || ''
 }
 
 const buildGalleryItem = (client: Client): GalleryMediaItem | null => {
@@ -76,11 +71,12 @@ const buildGalleryItem = (client: Client): GalleryMediaItem | null => {
   }
 }
 
-export function ClientsGallery({ clients, isReady = false }: ClientsGalleryProps) {
+export function ClientsGallery({ clients }: ClientsGalleryProps) {
   const [galleryItems, setGalleryItems] = useState<GalleryMediaItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [shouldRenderGallery, setShouldRenderGallery] = useState(false)
+  const [totalPages, setTotalPages] = useState(1)
   const sectionRef = useRef<HTMLElement | null>(null)
   const itemsPerPage = 12
 
@@ -109,22 +105,29 @@ export function ClientsGallery({ clients, isReady = false }: ClientsGalleryProps
     let cancelled = false
 
     const syncClients = async () => {
+      if (!shouldRenderGallery) {
+        return
+      }
+
       if (Array.isArray(clients)) {
         const transformedItems = clients
           .map(buildGalleryItem)
           .filter(Boolean) as GalleryMediaItem[]
+        const localTotalPages = Math.max(1, Math.ceil(transformedItems.length / itemsPerPage))
+        const offset = (currentPage - 1) * itemsPerPage
 
         if (cancelled) return
 
-        setGalleryItems(transformedItems)
-        setIsLoading(!isReady)
+        setGalleryItems(transformedItems.slice(offset, offset + itemsPerPage))
+        setTotalPages(localTotalPages)
+        setIsLoading(false)
         return
       }
 
       setIsLoading(true)
 
       try {
-        const res = await fetch('/api/clients')
+        const res = await fetch(`/api/clients?page=${currentPage}&limit=${itemsPerPage}`)
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`)
         }
@@ -138,6 +141,7 @@ export function ClientsGallery({ clients, isReady = false }: ClientsGalleryProps
         if (cancelled) return
 
         setGalleryItems(transformedItems)
+        setTotalPages(Math.max(1, Number(data?.pagination?.totalPages || 1)))
       } catch (err) {
         console.error('Failed to load clients for gallery', err)
       } finally {
@@ -152,17 +156,14 @@ export function ClientsGallery({ clients, isReady = false }: ClientsGalleryProps
     return () => {
       cancelled = true
     }
-  }, [clients, isReady])
+  }, [clients, currentPage, shouldRenderGallery])
 
   useEffect(() => {
+    if (!Array.isArray(clients)) return
     setCurrentPage(1)
-  }, [galleryItems.length])
+  }, [clients?.length])
 
-  const totalPages = Math.ceil(galleryItems.length / itemsPerPage)
-  const paginatedItems = galleryItems.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
+  const paginatedItems = galleryItems
 
   return (
     <section

@@ -3,6 +3,7 @@ import './Home.css'
 import { ClientsGallery } from '../components/ClientsGallery'
 import { loadSiteText } from '@/content/siteText'
 import { loadLatestWorkPosts } from '@/content/latestWork'
+import { buildMediaPreviewUrl, isVideoUrl } from '@/lib/mediaPreview'
 import { Filter, Instagram, Facebook, Mail, Phone } from 'lucide-react'
 
 const mergeSiteText = (incoming) => {
@@ -32,7 +33,6 @@ function Home() {
   const [siteText, setSiteText] = useState(() => mergeSiteText())
   const [latestWorkPosts, setLatestWorkPosts] = useState(() => loadLatestWorkPosts())
   const [clients, setClients] = useState([])
-  const [clientsLoaded, setClientsLoaded] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [activeFilter, setActiveFilter] = useState('All')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
@@ -41,20 +41,14 @@ function Home() {
 
   const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
 
-  const isVideoUrl = (url) => typeof url === 'string' && (
-    url.startsWith('data:video/')
-    || url.endsWith('.mp4')
-    || url.endsWith('.webm')
-    || url.endsWith('.mov')
-  )
-
   const getClientCardImage = (client) => {
     const candidates = [
       client?.logo,
       client?.thumbnailUrl,
       ...(Array.isArray(client?.images) ? client.images : []),
     ].filter(Boolean)
-    return candidates.find((url) => !isVideoUrl(url)) || ''
+    const sourceUrl = candidates.find((url) => !isVideoUrl(url)) || ''
+    return buildMediaPreviewUrl(sourceUrl, { width: 640, height: 640, quality: 68 }) || sourceUrl
   }
 
   const filteredClients = clients.filter(client => {
@@ -91,8 +85,6 @@ function Home() {
         setClients(Array.isArray(data?.clients) ? data.clients : [])
       } catch (err) {
         console.error('Failed to load API data', err)
-      } finally {
-        setClientsLoaded(true)
       }
     }
     fetchAll()
@@ -146,12 +138,14 @@ function Home() {
   const email = personalData?.email || 'andreaabikhalil@gmail.com'
   const phone = personalData?.phone || '03 56 16 58'
   const fullName = personalData?.fullName || 'Andrea Abi Khalil'
+  const heroImageUrl = buildMediaPreviewUrl(personalData?.heroImage, { width: 1800, height: 1200, quality: 74 }) || personalData?.heroImage
+  const profileImageUrl = buildMediaPreviewUrl(personalData?.profileImage, { width: 900, height: 900, quality: 72 }) || personalData?.profileImage
 
   return (
     <div className="home-page">
       {/* Hero Section */}
-      <section className="hero-section" style={personalData?.heroImage ? {
-        backgroundImage: `url(${personalData.heroImage})`,
+      <section className="hero-section" style={heroImageUrl ? {
+        backgroundImage: `url(${heroImageUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center'
       } : {}}>
@@ -176,8 +170,8 @@ function Home() {
           <div className="about-image-container">
             <h2 className="about-image-title">{renderMultilineTitle(siteText.home.meetArtistTitle)}</h2>
             <div className="about-image">
-              {personalData?.profileImage ? (
-                <img src={personalData.profileImage} alt="Andrea Abi Khalil" className="profile-image" loading="lazy" decoding="async" />
+              {profileImageUrl ? (
+                <img src={profileImageUrl} alt="Andrea Abi Khalil" className="profile-image" loading="lazy" decoding="async" />
               ) : (
                 <div className="placeholder-image">{siteText.home.placeholderArtistPhoto}</div>
               )}
@@ -200,7 +194,13 @@ function Home() {
               <article key={post.id} className="work-card">
                 <div className="work-image">
                   {post.imageUrl ? (
-                    <img className="work-image-img" src={post.imageUrl} alt={post.title} loading="lazy" decoding="async" />
+                    <img
+                      className="work-image-img"
+                      src={buildMediaPreviewUrl(post.imageUrl, { width: 960, height: 540, quality: 72 }) || post.imageUrl}
+                      alt={post.title}
+                      loading="lazy"
+                      decoding="async"
+                    />
                   ) : (
                     <div className="placeholder-image">{siteText.home.placeholderPicture}</div>
                   )}
@@ -324,7 +324,7 @@ function Home() {
       </section>
 
       {/* Clients Gallery Section */}
-      <ClientsGallery clients={clients} isReady={clientsLoaded} />
+      <ClientsGallery />
 
       {/* Creative Services Section */}
       <section className="services-section">

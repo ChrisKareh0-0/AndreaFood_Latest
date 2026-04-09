@@ -1,7 +1,8 @@
 "use client"
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, X } from 'lucide-react'
+import { Play } from 'lucide-react'
+import { buildMediaPreviewUrl, isVideoUrl } from '@/lib/mediaPreview'
 
 interface SourceClientType {
   id: number
@@ -27,15 +28,6 @@ interface MediaItemType {
 }
 
 type MediaRenderVariant = 'grid' | 'modal' | 'thumb'
-
-const isVideoUrl = (url?: string): boolean => {
-  return !!url && (
-    url.startsWith('data:video/')
-    || url.endsWith('.mp4')
-    || url.endsWith('.webm')
-    || url.endsWith('.mov')
-  )
-}
 
 const getVideoMimeType = (url?: string): string => {
   if (!url) return 'video/mp4'
@@ -71,7 +63,7 @@ const resolveClientImages = (item?: MediaItemType | null): string[] => {
   ])
 }
 
-const getDisplayImageUrl = (item?: MediaItemType | null): string => {
+const getImageCandidate = (item?: MediaItemType | null): string => {
   if (!item) return ''
 
   const candidates = uniqueStrings([
@@ -81,6 +73,38 @@ const getDisplayImageUrl = (item?: MediaItemType | null): string => {
   ])
 
   return candidates.find((url) => !isVideoUrl(url)) || ''
+}
+
+const getDisplayImageUrl = (item?: MediaItemType | null, variant: MediaRenderVariant = 'grid'): string => {
+  if (variant === 'modal') {
+    const modalCandidates = uniqueStrings([
+      ...resolveClientImages(item),
+      item?.url,
+      item?.previewUrl,
+    ])
+
+    return modalCandidates.find((url) => !isVideoUrl(url)) || ''
+  }
+
+  const source = getImageCandidate(item)
+  if (!source) return ''
+
+  return buildMediaPreviewUrl(source, {
+    width: variant === 'thumb' ? 220 : 720,
+    height: variant === 'thumb' ? 220 : 720,
+    quality: variant === 'thumb' ? 64 : 68,
+  }) || source
+}
+
+const getVideoPosterUrl = (item?: MediaItemType | null): string => {
+  const source = getImageCandidate(item)
+  if (!source) return ''
+
+  return buildMediaPreviewUrl(source, {
+    width: 1600,
+    height: 900,
+    quality: 72,
+  }) || source
 }
 
 const attachImagesToItem = (item: MediaItemType, images: string[]): MediaItemType => ({
@@ -106,7 +130,8 @@ const MediaItem = ({
   const [imgError, setImgError] = useState(false)
   const [videoError, setVideoError] = useState(false)
   const isVideo = item.type === 'video' || isVideoUrl(item.url)
-  const displayImageUrl = getDisplayImageUrl(item)
+  const displayImageUrl = getDisplayImageUrl(item, variant)
+  const videoPosterUrl = isVideo ? getVideoPosterUrl(item) : ''
 
   useEffect(() => {
     setImgError(false)
@@ -132,7 +157,7 @@ const MediaItem = ({
             controls
             playsInline
             preload="metadata"
-            poster={displayImageUrl || undefined}
+            poster={videoPosterUrl || undefined}
             onError={() => setVideoError(true)}
           >
             <source src={item.url} type={getVideoMimeType(item.url)} />
@@ -173,7 +198,9 @@ const MediaItem = ({
     )
   }
 
-  const imageUrl = displayImageUrl || item.url
+  const imageUrl = variant === 'modal'
+    ? (displayImageUrl || item.url)
+    : displayImageUrl
 
   return (
     <div
@@ -498,17 +525,10 @@ const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({
     return images
   }, [])
 
-  const prefetchClientMedia = useCallback((item: MediaItemType) => {
-    void fetchClientMedia(item).catch(() => {
-      // Keep previews lightweight even if the background metadata fetch fails.
-    })
-  }, [fetchClientMedia])
-
   const openSelectedItem = useCallback((item: MediaItemType) => {
     const cachedImages = cachedMediaRef.current[item.id]
     setSelectedItem(cachedImages?.length ? attachImagesToItem(item, cachedImages) : item)
-    prefetchClientMedia(item)
-  }, [prefetchClientMedia])
+  }, [])
 
   useEffect(() => {
     if (!selectedItem) return undefined
@@ -597,66 +617,37 @@ const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({
         )}
       </div>
 
-      <AnimatePresence mode="wait">
+      <div className="mx-auto grid w-full auto-rows-[200px] grid-cols-2 gap-4 px-8 sm:grid-cols-3 sm:auto-rows-[240px] sm:px-12 md:grid-cols-4 md:auto-rows-[280px] md:px-16 lg:grid-cols-5 lg:gap-6 lg:px-24">
+        {items.map((item) => (
+          <div
+            key={item.id}
+            className={`relative cursor-pointer overflow-hidden rounded-xl transition-transform duration-200 hover:scale-[1.02] ${item.span}`}
+            onClick={() => openSelectedItem(item)}
+          >
+            <MediaItem
+              item={item}
+              className="absolute inset-0 h-full w-full"
+              variant="grid"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent opacity-0 transition-opacity duration-300 hover:opacity-100">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <h3 className="px-4 text-center text-lg font-bold leading-tight text-white md:text-xl lg:text-2xl">
+                  {item.title}
+                </h3>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <AnimatePresence>
         {selectedItem ? (
           <GalleryModal
             selectedItem={selectedItem}
             isOpen={true}
             onClose={closeSelectedItem}
           />
-        ) : (
-          <motion.div
-            className="mx-auto grid w-full auto-rows-[200px] grid-cols-2 gap-4 px-8 sm:grid-cols-3 sm:auto-rows-[240px] sm:px-12 md:grid-cols-4 md:auto-rows-[280px] md:px-16 lg:grid-cols-5 lg:gap-6 lg:px-24"
-            initial="hidden"
-            animate="visible"
-            exit="hidden"
-            variants={{
-              hidden: { opacity: 0 },
-              visible: {
-                opacity: 1,
-                transition: { staggerChildren: 0.1 },
-              },
-            }}
-          >
-            {items.map((item, index) => (
-              <motion.div
-                key={item.id}
-                className={`relative cursor-pointer overflow-hidden rounded-xl ${item.span}`}
-                onClick={() => openSelectedItem(item)}
-                onMouseEnter={() => prefetchClientMedia(item)}
-                onFocus={() => prefetchClientMedia(item)}
-                variants={{
-                  hidden: { y: 50, scale: 0.9, opacity: 0 },
-                  visible: {
-                    y: 0,
-                    scale: 1,
-                    opacity: 1,
-                    transition: {
-                      type: 'spring',
-                      stiffness: 350,
-                      damping: 25,
-                      delay: index * 0.05,
-                    },
-                  },
-                }}
-                whileHover={{ scale: 1.02 }}
-              >
-                <MediaItem
-                  item={item}
-                  className="absolute inset-0 h-full w-full"
-                  variant="grid"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent opacity-0 transition-opacity duration-300 hover:opacity-100">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <h3 className="px-4 text-center text-lg font-bold leading-tight text-white md:text-xl lg:text-2xl">
-                      {item.title}
-                    </h3>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
     </div>
   )
