@@ -351,7 +351,7 @@ async function main() {
     }
   });
 
-  const reportPath = path.join(projectRoot, 'upload-to-railway-report.json');
+  const reportPath = path.join(projectRoot, 'media-upload-report.json');
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
   console.log('');
