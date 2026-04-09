@@ -1,9 +1,17 @@
-export const isVideoUrl = (url) => typeof url === 'string' && (
-  url.startsWith('data:video/')
-  || url.endsWith('.mp4')
-  || url.endsWith('.webm')
-  || url.endsWith('.mov')
-)
+const normalizeMediaUrl = (value) => {
+  if (typeof value !== 'string') return ''
+  return value.trim().split('#')[0].split('?')[0].toLowerCase()
+}
+
+export const isVideoUrl = (url) => {
+  const normalized = normalizeMediaUrl(url)
+  return !!normalized && (
+    normalized.startsWith('data:video/')
+    || normalized.endsWith('.mp4')
+    || normalized.endsWith('.webm')
+    || normalized.endsWith('.mov')
+  )
+}
 
 const normalizePreviewSource = (value) => {
   if (typeof value !== 'string') return ''

@@ -3,6 +3,7 @@ import './Management.css'
 import { useToast } from '../../hooks/useToast'
 import { ToastContainer } from '../../components/Toast'
 import { buildMediaFolder, extractMediaFolderFromUrl, uploadMediaFile, uploadMediaFiles } from '@/lib/mediaUpload'
+import { isVideoUrl } from '@/lib/mediaPreview'
 
 function ClientManagement() {
   const { toasts, showToast, removeToast } = useToast()
@@ -144,10 +145,6 @@ function ClientManagement() {
 
   const handleRemoveImage = (index) => {
     setFormData({ ...formData, images: formData.images.filter((_, i) => i !== index) })
-  }
-
-  const isVideoFile = (url) => {
-    return url?.endsWith('.mp4') || url?.endsWith('.webm') || url?.endsWith('.mov')
   }
 
   const handleSubmit = async (e) => {
@@ -308,7 +305,7 @@ function ClientManagement() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '0.75rem' }}>
                     {formData.images.map((img, idx) => (
                       <div key={idx} style={{ position: 'relative' }}>
-                        {isVideoFile(img) ? (
+                        {isVideoUrl(img) ? (
                           <video src={img} style={{ width: '100%', borderRadius: '8px' }} controls />
                         ) : (
                           <img src={img} alt={`Gallery ${idx + 1}`} style={{ width: '100%', borderRadius: '8px' }} />
@@ -323,7 +320,7 @@ function ClientManagement() {
                           borderRadius: '4px',
                           fontSize: '10px'
                         }}>
-                          {isVideoFile(img) ? '🎥' : '🖼️'}
+                          {isVideoUrl(img) ? '🎥' : '🖼️'}
                         </span>
                         <button
                           type="button"

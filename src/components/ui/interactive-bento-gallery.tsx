@@ -1,7 +1,7 @@
 "use client"
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play } from 'lucide-react'
+import { Play, X } from 'lucide-react'
 import { buildMediaPreviewUrl, isVideoUrl } from '@/lib/mediaPreview'
 
 interface SourceClientType {
@@ -31,11 +31,12 @@ type MediaRenderVariant = 'grid' | 'modal' | 'thumb'
 
 const getVideoMimeType = (url?: string): string => {
   if (!url) return 'video/mp4'
-  if (url.startsWith('data:video/webm')) return 'video/webm'
-  if (url.startsWith('data:video/quicktime') || url.startsWith('data:video/mov')) return 'video/quicktime'
-  if (url.startsWith('data:video/')) return 'video/mp4'
-  if (url.endsWith('.webm')) return 'video/webm'
-  if (url.endsWith('.mov')) return 'video/quicktime'
+  const normalized = String(url).toLowerCase()
+  if (normalized.startsWith('data:video/webm')) return 'video/webm'
+  if (normalized.startsWith('data:video/quicktime') || normalized.startsWith('data:video/mov')) return 'video/quicktime'
+  if (normalized.startsWith('data:video/')) return 'video/mp4'
+  if (normalized.endsWith('.webm')) return 'video/webm'
+  if (normalized.endsWith('.mov')) return 'video/quicktime'
   return 'video/mp4'
 }
 
