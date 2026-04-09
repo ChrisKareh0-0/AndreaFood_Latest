@@ -249,7 +249,7 @@ const MediaItem = ({
         <img
           src={imageUrl}
           alt={item.title}
-          className="h-full w-full object-cover"
+          className={variant === 'modal' ? 'h-full w-full bg-black object-contain' : 'h-full w-full object-cover'}
           loading="lazy"
           decoding="async"
           onError={() => setImgError(true)}
@@ -373,7 +373,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+        className="fixed inset-0 z-[1200] bg-black/80 backdrop-blur-md"
         onClick={onClose}
       />
 
@@ -382,7 +382,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-        className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto p-2 sm:p-4 md:p-6 pointer-events-none"
+        className="fixed inset-0 z-[1210] flex items-center justify-center overflow-hidden p-2 sm:p-4 md:p-6 pointer-events-none"
         style={{
           paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
           paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
@@ -390,26 +390,12 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
           paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
         }}
       >
-        <button
-          type="button"
-          className="pointer-events-auto fixed right-3 top-3 z-[70] flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-black/85"
-          style={{
-            top: 'max(0.75rem, env(safe-area-inset-top))',
-            right: 'max(0.75rem, env(safe-area-inset-right))',
-          }}
-          onClick={onClose}
-          aria-label="Close gallery"
-        >
-          <X className="h-4 w-4" />
-          <span>Close</span>
-        </button>
-
         <div
-          className="modal-content-container pointer-events-auto relative mt-1 flex h-[90vh] w-full max-w-6xl max-h-[940px] overflow-hidden rounded-2xl bg-gray-950 shadow-2xl sm:h-[88vh]"
+          className="modal-content-container pointer-events-auto relative flex h-[min(90vh,900px)] w-full max-w-[1180px] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#070a11] shadow-[0_30px_80px_rgba(0,0,0,0.65)]"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex h-full w-full flex-col bg-gray-950">
-            <div className="sticky top-0 z-30 shrink-0 flex items-center justify-between gap-3 border-b border-white/10 bg-black/75 px-4 py-3 text-white backdrop-blur-md">
+            <div className="relative z-30 shrink-0 flex items-center justify-between gap-3 border-b border-white/10 bg-gradient-to-r from-black/80 via-black/65 to-black/75 px-4 py-3 text-white backdrop-blur-md sm:px-5">
               <div className="min-w-0">
                 <h3 className="truncate text-base font-semibold sm:text-lg">
                   {selectedItem.title}
@@ -423,20 +409,20 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
 
               <button
                 type="button"
-                className="flex shrink-0 items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/20"
+                className="flex shrink-0 items-center gap-2 rounded-full border border-white/20 bg-black/70 px-3 py-2 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-black/90"
                 onClick={onClose}
-                aria-label="Close gallery"
+                aria-label="Exit viewer"
               >
                 <X className="h-4 w-4" />
-                <span>Close</span>
+                <span>Exit</span>
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 items-center justify-center bg-gray-900/85 px-3 py-3 sm:px-4 md:px-6">
+            <div className="relative flex min-h-0 flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,rgba(73,90,116,0.35),rgba(7,10,17,0.96)_58%)] px-2 py-2 sm:px-4 sm:py-4 md:px-6">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`${selectedItem.id}-${currentImageIndex}`}
-                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-black shadow-xl"
+                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   exit={{ y: 20, opacity: 0 }}
@@ -452,7 +438,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
                       <button
                         type="button"
                         onClick={handlePrev}
-                        className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white transition-colors hover:bg-black/80 sm:left-4"
+                        className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/65 p-2 text-white shadow-lg transition-colors hover:bg-black/90 sm:left-4"
                         aria-label="Previous media"
                       >
                         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -462,7 +448,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
                       <button
                         type="button"
                         onClick={handleNext}
-                        className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white transition-colors hover:bg-black/80 sm:right-4"
+                        className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/65 p-2 text-white shadow-lg transition-colors hover:bg-black/90 sm:right-4"
                         aria-label="Next media"
                       >
                         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -475,7 +461,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
               </AnimatePresence>
             </div>
 
-            <div className="shrink-0 border-t border-white/10 bg-black/80 px-4 py-3 text-white">
+            <div className="shrink-0 border-t border-white/10 bg-black/75 px-4 py-3 text-white sm:px-5">
               <p className="text-sm text-white/80 sm:text-base">
                 {selectedItem.desc}
               </p>
@@ -633,6 +619,23 @@ const InteractiveBentoGallery: React.FC<InteractiveBentoGalleryProps> = ({
   useEffect(() => {
     if (!selectedItem) {
       modalHistoryEntryRef.current = false
+    }
+  }, [selectedItem])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+
+    const className = 'media-viewer-open'
+    const targets = [document.documentElement, document.body]
+
+    if (selectedItem) {
+      targets.forEach((target) => target.classList.add(className))
+    } else {
+      targets.forEach((target) => target.classList.remove(className))
+    }
+
+    return () => {
+      targets.forEach((target) => target.classList.remove(className))
     }
   }, [selectedItem])
 
