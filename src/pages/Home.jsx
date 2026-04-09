@@ -252,6 +252,8 @@ function Home() {
           <div className="search-container">
             <input
               type="text"
+              id="client-search"
+              name="clientSearch"
               placeholder={siteText.home.searchPlaceholder}
               className="search-input"
               value={searchTerm}
@@ -369,11 +371,11 @@ function Home() {
 
           <form className="contact-form">
             <div className="form-row">
-              <input type="text" placeholder={siteText.home.contactNamePlaceholder} className="form-input" />
-              <input type="email" placeholder={siteText.home.contactEmailPlaceholder} className="form-input" />
+              <input id="contact-name" name="name" type="text" placeholder={siteText.home.contactNamePlaceholder} className="form-input" />
+              <input id="contact-email" name="email" type="email" placeholder={siteText.home.contactEmailPlaceholder} className="form-input" />
             </div>
-            <input type="text" placeholder={siteText.home.contactSubjectPlaceholder} className="form-input full-width" />
-            <textarea placeholder={siteText.home.contactMessagePlaceholder} className="form-textarea"></textarea>
+            <input id="contact-subject" name="subject" type="text" placeholder={siteText.home.contactSubjectPlaceholder} className="form-input full-width" />
+            <textarea id="contact-message" name="message" placeholder={siteText.home.contactMessagePlaceholder} className="form-textarea"></textarea>
             <button type="submit" className="form-submit">{siteText.home.contactSendLabel}</button>
           </form>
         </div>

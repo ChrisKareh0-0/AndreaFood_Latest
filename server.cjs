@@ -1272,6 +1272,23 @@ app.get('/api/clients/:id', async (req, res) => {
 });
 
 app.get('/api/clients/:id/media', async (req, res) => {
+  const mediaKey = (value) => {
+    const raw = text(value);
+    if (!raw) return '';
+
+    const withoutHash = raw.split('#')[0];
+    const withoutQuery = withoutHash.split('?')[0];
+
+    try {
+      const parsed = /^https?:\/\//i.test(withoutQuery)
+        ? new URL(withoutQuery).pathname
+        : withoutQuery;
+      return decodeURIComponent(parsed).toLowerCase();
+    } catch {
+      return withoutQuery.toLowerCase();
+    }
+  };
+
   const dedupeMediaItems = (items) => {
     const seen = new Set();
     const list = Array.isArray(items) ? items : [];
@@ -1279,8 +1296,9 @@ app.get('/api/clients/:id/media', async (req, res) => {
 
     for (const item of list) {
       const url = text(item?.url);
-      if (!url || seen.has(url)) continue;
-      seen.add(url);
+      const key = mediaKey(url);
+      if (!url || !key || seen.has(key)) continue;
+      seen.add(key);
       result.push(item);
     }
 

@@ -63,30 +63,30 @@ const resolveClientImages = (item?: MediaItemType | null): string[] => {
   ])
 }
 
-const getImageCandidate = (item?: MediaItemType | null): string => {
+const getImageCandidate = (
+  item?: MediaItemType | null,
+  options: { preferItemUrl?: boolean } = {}
+): string => {
   if (!item) return ''
 
-  const candidates = uniqueStrings([
-    item.previewUrl,
-    ...resolveClientImages(item),
-    item.url,
-  ])
+  const orderedCandidates = options.preferItemUrl
+    ? [item.url, item.previewUrl, ...resolveClientImages(item)]
+    : [item.previewUrl, ...resolveClientImages(item), item.url]
+
+  const candidates = uniqueStrings(orderedCandidates)
 
   return candidates.find((url) => !isVideoUrl(url)) || ''
 }
 
 const getDisplayImageUrl = (item?: MediaItemType | null, variant: MediaRenderVariant = 'grid'): string => {
-  if (variant === 'modal') {
-    const modalCandidates = uniqueStrings([
-      ...resolveClientImages(item),
-      item?.url,
-    ])
-
-    return modalCandidates.find((url) => !isVideoUrl(url)) || ''
-  }
-
-  const source = getImageCandidate(item)
+  const source = getImageCandidate(item, {
+    preferItemUrl: variant === 'modal' || variant === 'thumb',
+  })
   if (!source) return ''
+
+  if (variant === 'modal') {
+    return source
+  }
 
   return buildMediaPreviewUrl(source, {
     width: variant === 'thumb' ? 220 : 720,
@@ -96,7 +96,7 @@ const getDisplayImageUrl = (item?: MediaItemType | null, variant: MediaRenderVar
 }
 
 const getVideoPosterUrl = (item?: MediaItemType | null): string => {
-  const source = getImageCandidate(item)
+  const source = getImageCandidate(item, { preferItemUrl: true })
   if (!source) return ''
 
   return buildMediaPreviewUrl(source, {
@@ -270,8 +270,9 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
   const clientImages = resolveClientImages(selectedItem)
 
   useEffect(() => {
-    setCurrentImageIndex(0)
-  }, [selectedItem?.id])
+    const selectedIndex = clientImages.findIndex((url) => url === selectedItem?.url)
+    setCurrentImageIndex(selectedIndex >= 0 ? selectedIndex : 0)
+  }, [clientImages, selectedItem?.id, selectedItem?.url])
 
   useEffect(() => {
     if (!isOpen) return undefined
@@ -473,7 +474,7 @@ const GalleryModal = ({ selectedItem, isOpen, onClose }: GalleryModalProps) => {
                     const thumbItem: MediaItemType = {
                       ...selectedItem,
                       url: mediaUrl,
-                      previewUrl: selectedItem.previewUrl,
+                      previewUrl: isVideoUrl(mediaUrl) ? selectedItem.previewUrl : mediaUrl,
                       type: isVideoUrl(mediaUrl) ? 'video' : 'image',
                       allImages: clientImages,
                     }

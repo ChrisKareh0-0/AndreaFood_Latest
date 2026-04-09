@@ -82,6 +82,8 @@ function MyWork() {
       <div className="search-container">
         <input
           type="text"
+          id="mywork-search"
+          name="myWorkSearch"
           placeholder={siteText.myWork.searchPlaceholder}
           className="search-input"
           value={searchTerm}
