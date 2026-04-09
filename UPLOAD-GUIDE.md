@@ -55,7 +55,7 @@ MEDIA_UPLOAD_CONCURRENCY=1 \
 npm run media:upload
 ```
 
-The uploader is safe to rerun. It uploads to the same `/clients/...` destination paths, so reruns are useful as repair or retry passes.
+The uploader is safe to rerun. By default it skips files that already exist on the live site, so reruns are useful as repair or retry passes.
 
 ## What The Uploader Does
 
@@ -64,6 +64,15 @@ The uploader is safe to rerun. It uploads to the same `/clients/...` destination
 3. Matches files by exact relative path, nested suffix match, or unique filename
 4. Uploads each matched file to the live Railway app
 5. Writes `media-upload-report.json` with uploaded, missing, ambiguous, and failed files
+
+Use `--force` only when you explicitly want to overwrite files that already exist:
+
+```bash
+API_BASE="https://andreafoodstyle.com" \
+MEDIA_SOURCE_PATH="/Users/chris/dev/For Chris" \
+MEDIA_UPLOAD_CONCURRENCY=1 \
+npm run media:upload -- --force
+```
 
 ## Verification
 
