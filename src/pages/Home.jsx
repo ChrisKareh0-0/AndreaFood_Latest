@@ -37,9 +37,17 @@ function Home() {
   const [activeFilter, setActiveFilter] = useState('All')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [currentServiceImageIndex, setCurrentServiceImageIndex] = useState(0)
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
   const itemsPerPage = 12
 
   const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const getClientCardImage = (client) => {
     const candidates = [
@@ -138,14 +146,32 @@ function Home() {
   const email = personalData?.email || 'andreaabikhalil@gmail.com'
   const phone = personalData?.phone || '03 56 16 58'
   const fullName = personalData?.fullName || 'Andrea Abi Khalil'
-  const heroImageUrl = buildMediaPreviewUrl(personalData?.heroImage, { width: 1800, height: 1200, quality: 74 }) || personalData?.heroImage
-  const profileImageUrl = buildMediaPreviewUrl(personalData?.profileImage, { width: 900, height: 900, quality: 72 }) || personalData?.profileImage
+  const desktopHeroImageUrl = buildMediaPreviewUrl(personalData?.heroImage, { width: 1800, height: 1200, quality: 74 }) || personalData?.heroImage
+  const mobileHeroImageUrl = buildMediaPreviewUrl(personalData?.mobileHeroImage, { width: 800, height: 1200, quality: 74 }) || personalData?.mobileHeroImage
+  const activeHeroImageUrl = (isMobile && personalData?.mobileHeroImage) ? mobileHeroImageUrl : desktopHeroImageUrl
+
+  const aboutSectionImageUrl = buildMediaPreviewUrl(bioContent?.aboutImage, { width: 900, height: 900, quality: 72 }) || bioContent?.aboutImage
+
+  const servicesImages = bioContent?.servicesImages || []
+  const currentServiceImageUrl = servicesImages.length > 0
+    ? buildMediaPreviewUrl(servicesImages[currentServiceImageIndex], { width: 1200, height: 800, quality: 72 }) || servicesImages[currentServiceImageIndex]
+    : null
+
+  const handleNextServiceImage = () => {
+    if (servicesImages.length === 0) return
+    setCurrentServiceImageIndex((prev) => (prev + 1) % servicesImages.length)
+  }
+
+  const handlePrevServiceImage = () => {
+    if (servicesImages.length === 0) return
+    setCurrentServiceImageIndex((prev) => (prev - 1 + servicesImages.length) % servicesImages.length)
+  }
 
   return (
     <div className="home-page">
       {/* Hero Section */}
-      <section className="hero-section" style={heroImageUrl ? {
-        backgroundImage: `url(${heroImageUrl})`,
+      <section className="hero-section" style={activeHeroImageUrl ? {
+        backgroundImage: `url(${activeHeroImageUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center'
       } : {}}>
@@ -170,8 +196,8 @@ function Home() {
           <div className="about-image-container">
             <h2 className="about-image-title">{renderMultilineTitle(siteText.home.meetArtistTitle)}</h2>
             <div className="about-image">
-              {profileImageUrl ? (
-                <img src={profileImageUrl} alt="Andrea Abi Khalil" className="profile-image" loading="lazy" decoding="async" />
+              {aboutSectionImageUrl ? (
+                <img src={aboutSectionImageUrl} alt="Andrea Abi Khalil" className="profile-image" loading="lazy" decoding="async" />
               ) : (
                 <div className="placeholder-image">{siteText.home.placeholderArtistPhoto}</div>
               )}
@@ -348,13 +374,23 @@ function Home() {
             </p>
           </div>
           <div className="services-carousel">
-            <button className="carousel-btn prev">&lt;</button>
+            <button className="carousel-btn prev" onClick={handlePrevServiceImage}>&lt;</button>
             <div className="services-image-container">
               <div className="services-image">
-                <div className="placeholder-image large">{siteText.home.placeholderPicture}</div>
+                {currentServiceImageUrl ? (
+                  <img
+                    src={currentServiceImageUrl}
+                    alt={`Service ${currentServiceImageIndex + 1}`}
+                    className="service-carousel-img"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <div className="placeholder-image large">{siteText.home.placeholderPicture}</div>
+                )}
               </div>
             </div>
-            <button className="carousel-btn next">&gt;</button>
+            <button className="carousel-btn next" onClick={handleNextServiceImage}>&gt;</button>
           </div>
         </div>
       </section>

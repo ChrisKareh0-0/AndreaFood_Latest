@@ -9,6 +9,14 @@ function ClientManagement() {
   const { toasts, showToast, removeToast } = useToast()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
+  const [sortBy, setSortBy] = useState(() => {
+    return localStorage.getItem('clientSortBy') || 'alphabet'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('clientSortBy', sortBy)
+  }, [sortBy])
+
   // Fetch clients from backend on mount
   useEffect(() => {
     const fetchClients = async () => {
@@ -24,6 +32,17 @@ function ClientManagement() {
     }
     fetchClients()
   }, [])
+
+  const sortedClients = [...clients].sort((a, b) => {
+    if (sortBy === 'alphabet') {
+      return (a.name || '').localeCompare(b.name || '')
+    } else if (sortBy === 'newest') {
+      return Number(b.id) - Number(a.id)
+    } else if (sortBy === 'oldest') {
+      return Number(a.id) - Number(b.id)
+    }
+    return 0
+  })
 
   const [categories] = useState(['TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media'])
   const [showModal, setShowModal] = useState(false)
@@ -199,19 +218,41 @@ function ClientManagement() {
       <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="section-header">
         <h2>Client Management</h2>
-        <button className="btn-primary" onClick={handleAdd}>
-          <span>➕</span>
-          Add New Client
-        </button>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <div className="sort-control" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#6b7b8c' }}>Sort by:</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              style={{
+                padding: '0.5rem 1rem',
+                border: '2px solid #e8f0f7',
+                borderRadius: '0.5rem',
+                fontSize: '0.9rem',
+                fontWeight: '600',
+                color: '#2c3e50',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="alphabet">Alphabetical (A-Z)</option>
+              <option value="newest">Last Added (Newest)</option>
+              <option value="oldest">First Added (Oldest)</option>
+            </select>
+          </div>
+          <button className="btn-primary" onClick={handleAdd}>
+            <span>➕</span>
+            Add New Client
+          </button>
+        </div>
       </div>
 
       <div className="clients-list">
         {loading ? (
           <div>Loading clients...</div>
-        ) : clients.length === 0 ? (
+        ) : sortedClients.length === 0 ? (
           <div>No clients found.</div>
         ) : (
-          clients.map((client) => (
+          sortedClients.map((client) => (
             <div key={client.id} className="client-item">
               <div className="client-logo">
                 {client.logo ? (

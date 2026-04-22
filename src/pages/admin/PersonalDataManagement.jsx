@@ -15,7 +15,7 @@ function PersonalDataManagement() {
     instagram: '',
     facebook: '',
     heroImage: '',
-    profileImage: ''
+    mobileHeroImage: ''
   })
   const personalMediaFolder = buildMediaFolder('site-content', 'personal-data')
 
@@ -145,11 +145,11 @@ function PersonalDataManagement() {
                 </div>
               </div>
               <div className="data-item">
-                <span className="data-label">Profile Image:</span>
+                <span className="data-label">Mobile Hero Image:</span>
                 <div className="data-value">
-                  {personalData?.profileImage ? (
+                  {personalData?.mobileHeroImage ? (
                     <div className="image-preview image-preview--compact">
-                      <img src={personalData.profileImage} alt="Profile preview" />
+                      <img src={personalData.mobileHeroImage} alt="Mobile Hero preview" />
                     </div>
                   ) : (
                     'Not set'
@@ -254,27 +254,27 @@ function PersonalDataManagement() {
                   </div>
                 </div>
                 <div className="form-group">
-                  <label>Profile Image (Meet the Artist)</label>
+                  <label>Mobile Hero Image</label>
                   <input
                     type="text"
-                    value={formData.profileImage}
-                    onChange={(e) => setFormData({ ...formData, profileImage: e.target.value })}
-                    placeholder="Enter profile image URL or upload below"
+                    value={formData.mobileHeroImage || ''}
+                    onChange={(e) => setFormData({ ...formData, mobileHeroImage: e.target.value })}
+                    placeholder="Enter mobile hero image URL or upload below"
                   />
                   <div className="file-upload-container">
                     <label className="file-upload-btn">
-                      📁 Upload Profile Image
+                      📁 Upload Mobile Hero Image
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => handleFileUpload(e, 'profileImage')}
+                        onChange={(e) => handleFileUpload(e, 'mobileHeroImage')}
                         style={{ display: 'none' }}
                       />
                     </label>
-                    {uploadingField === 'profileImage' ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
-                    {formData.profileImage && (
+                    {uploadingField === 'mobileHeroImage' ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
+                    {formData.mobileHeroImage && (
                       <div className="image-preview">
-                        <img src={formData.profileImage} alt="Profile preview" />
+                        <img src={formData.mobileHeroImage} alt="Mobile Hero preview" />
                       </div>
                     )}
                   </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { defaultSiteText } from '@/content/siteText';
 import './Management.css';
-import { buildMediaFolder, uploadMediaFile } from '@/lib/mediaUpload';
+import { buildMediaFolder, uploadMediaFile, uploadMediaFiles } from '@/lib/mediaUpload';
 
 function BioManagement() {
   const [content, setContent] = useState(null);
@@ -9,8 +9,12 @@ function BioManagement() {
   const [latestWorkPosts, setLatestWorkPosts] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [uploadingPostId, setUploadingPostId] = useState(null);
+  const [isUploadingAboutImage, setIsUploadingAboutImage] = useState(false);
+  const [isUploadingServicesImages, setIsUploadingServicesImages] = useState(false);
   const [formData, setFormData] = useState({});
   const latestWorkFolder = buildMediaFolder('site-content', 'latest-work');
+  const aboutMediaFolder = buildMediaFolder('site-content', 'about');
+  const servicesMediaFolder = buildMediaFolder('site-content', 'services');
 
   useEffect(() => {
     async function fetchAdminData() {
@@ -73,6 +77,47 @@ function BioManagement() {
     }
   };
 
+  const handleAboutImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      setIsUploadingAboutImage(true);
+      const result = await uploadMediaFile(file, aboutMediaFolder);
+      setFormData((prev) => ({ ...prev, aboutImage: result.url }));
+    } catch (err) {
+      console.error('Failed to upload about image', err);
+    } finally {
+      setIsUploadingAboutImage(false);
+    }
+  };
+
+  const handleServicesImagesUpload = async (e) => {
+    const files = e.target.files;
+    e.target.value = '';
+    if (!files || files.length === 0) return;
+    try {
+      setIsUploadingServicesImages(true);
+      const results = await uploadMediaFiles(files, servicesMediaFolder);
+      const newUrls = results.map(r => r.url);
+      setFormData((prev) => ({
+        ...prev,
+        servicesImages: [...(prev.servicesImages || []), ...newUrls]
+      }));
+    } catch (err) {
+      console.error('Failed to upload services images', err);
+    } finally {
+      setIsUploadingServicesImages(false);
+    }
+  };
+
+  const handleRemoveServicesImage = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      servicesImages: (prev.servicesImages || []).filter((_, i) => i !== index)
+    }));
+  };
+
   const handleAddLatestWorkPost = () => {
     const newPost = {
       id: Date.now(),
@@ -99,7 +144,9 @@ function BioManagement() {
       aboutTitle,
       aboutParagraph1,
       aboutParagraph2,
+      aboutImage,
       servicesDescription,
+      servicesImages,
       contactSubtitle,
       contactDescription,
       siteText: nextSiteText,
@@ -110,7 +157,9 @@ function BioManagement() {
       aboutTitle,
       aboutParagraph1,
       aboutParagraph2,
+      aboutImage,
       servicesDescription,
+      servicesImages,
       contactSubtitle,
       contactDescription,
     };
@@ -173,12 +222,26 @@ function BioManagement() {
                 <h4>{content?.aboutTitle || 'No title available'}</h4>
                 <p>{content?.aboutParagraph1 || 'No first paragraph available.'}</p>
                 <p>{content?.aboutParagraph2 || 'No second paragraph available.'}</p>
+                {content?.aboutImage && (
+                  <div className="image-preview image-preview--compact" style={{ marginTop: '1rem' }}>
+                    <img src={content.aboutImage} alt="About section preview" />
+                  </div>
+                )}
               </div>
             </div>
             <div className="content-section">
               <h3>Services Description</h3>
               <div className="content-preview">
                 <p>{content?.servicesDescription || 'No services description available.'}</p>
+                {content?.servicesImages && content.servicesImages.length > 0 && (
+                  <div className="image-grid-preview" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '1rem' }}>
+                    {content.servicesImages.map((img, idx) => (
+                      <div key={idx} className="image-preview image-preview--compact">
+                        <img src={img} alt={`Service ${idx + 1}`} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div className="content-section">
@@ -239,6 +302,32 @@ function BioManagement() {
                     required
                   ></textarea>
                 </div>
+                <div className="form-group">
+                  <label>About Section Image</label>
+                  <input
+                    type="text"
+                    value={formData.aboutImage || ''}
+                    onChange={(e) => setFormData({ ...formData, aboutImage: e.target.value })}
+                    placeholder="Enter image URL or upload below"
+                  />
+                  <div className="file-upload-container">
+                    <label className="file-upload-btn">
+                      📁 Upload About Image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAboutImageUpload}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    {isUploadingAboutImage ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
+                  </div>
+                  {formData.aboutImage && (
+                    <div className="image-preview image-preview--compact" style={{ marginTop: '1rem' }}>
+                      <img src={formData.aboutImage} alt="About section preview" />
+                    </div>
+                  )}
+                </div>
               </div>
               {/* Services Section */}
               <div className="form-card">
@@ -251,6 +340,54 @@ function BioManagement() {
                     rows="4"
                     required
                   ></textarea>
+                </div>
+                <div className="form-group">
+                  <label>Services Carousel Images</label>
+                  <div className="file-upload-container">
+                    <label className="file-upload-btn">
+                      📁 Upload Service Images
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleServicesImagesUpload}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    {isUploadingServicesImages ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
+                  </div>
+                  {formData.servicesImages && formData.servicesImages.length > 0 && (
+                    <div className="image-management-grid" style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginTop: '1rem' }}>
+                      {formData.servicesImages.map((img, idx) => (
+                        <div key={idx} className="image-preview image-preview--compact" style={{ position: 'relative' }}>
+                          <img src={img} alt={`Service ${idx + 1}`} />
+                          <button
+                            type="button"
+                            className="btn-delete-small"
+                            onClick={() => handleRemoveServicesImage(idx)}
+                            style={{
+                              position: 'absolute',
+                              top: '-8px',
+                              right: '-8px',
+                              background: '#ff4d4f',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '20px',
+                              height: '20px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               {/* Contact Section */}
