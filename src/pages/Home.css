@@ -427,7 +427,7 @@ html.dark-mode .about-section {
   left: 0;
   right: 0;
   height: 300px;
-  background: #d4e3ed;
+  background: var(--section-bg);
   clip-path: ellipse(150% 100% at 50% 100%);
 }
 
@@ -795,11 +795,19 @@ html.dark-mode .about-section {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .services-image .placeholder-image {
   color: white;
   font-size: 2rem;
+}
+
+.service-carousel-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 /* Contact Section */
@@ -816,7 +824,7 @@ html.dark-mode .about-section {
   left: 0;
   right: 0;
   height: 300px;
-  background: #d4e3ed;
+  background: var(--section-bg);
   clip-path: ellipse(150% 100% at 50% 100%);
 }
 
@@ -827,7 +835,7 @@ html.dark-mode .about-section {
   left: 0;
   right: 0;
   height: 300px;
-  background: #d4e3ed;
+  background: var(--section-bg);
   clip-path: ellipse(150% 100% at 50% 0%);
 }
 
@@ -942,17 +950,19 @@ html.dark-mode .about-section {
 .logo-icon {
   width: 80px;
   height: 80px;
-  background: #a8c5d8;
+  background: #f7fbfd;
   border-radius: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid rgba(74, 123, 167, 0.18);
 }
 
-.apron-placeholder {
-  font-size: 0.7rem;
-  color: #4a7ba7;
-  text-align: center;
+.footer-logo-mark {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  display: block;
 }
 
 .logo-text {

@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "vite",
     "dev:all": "concurrently \"node server.cjs\" \"npm run dev\"",
+    "dev:local": "concurrently \"DATABASE_URL= ENABLE_LOCAL_CONTENT_FALLBACK=true node server.cjs\" \"npm run dev\"",
+    "dev:prod-data": "npm run data:sync-production && npm run dev:local",
     "build": "vite build",
     "lint": "eslint .",
     "data:extract-inline": "node extract-inline-site-media.cjs",
+    "data:sync-production": "node sync-production-data.cjs",
     "data:sync": "node sync-clients-from-local-store.cjs",
     "preview": "vite preview",
     "media:import": "node bulk-import-media.cjs",

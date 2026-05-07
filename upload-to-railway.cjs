@@ -73,6 +73,37 @@ function normalizeClientPath(relativeUrl) {
     .replace(/^\/+/, '');
 }
 
+function normalizeReferencedMediaUrl(value) {
+  const rawValue = String(value || '').trim();
+  if (!rawValue || rawValue.startsWith('data:')) return '';
+
+  try {
+    const parsed = new URL(rawValue, apiBase || 'https://local.invalid');
+    if (!parsed.pathname.startsWith('/clients/')) return '';
+    return decodeURIComponent(parsed.pathname);
+  } catch {
+    const cleaned = rawValue.split('#')[0].split('?')[0];
+    return cleaned.startsWith('/clients/') ? cleaned : '';
+  }
+}
+
+function collectMediaUrls(value, urls) {
+  if (typeof value === 'string') {
+    const mediaUrl = normalizeReferencedMediaUrl(value);
+    if (mediaUrl) urls.add(mediaUrl);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectMediaUrls(item, urls));
+    return;
+  }
+
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach((item) => collectMediaUrls(item, urls));
+  }
+}
+
 function resolveSourceFile(relativeUrl, index) {
   const relativePath = normalizeClientPath(relativeUrl);
   const target = relativePath.toLowerCase();
@@ -108,26 +139,50 @@ function resolveSourceFile(relativeUrl, index) {
   };
 }
 
-function readReferencedUrls() {
+function readLocalReferencedUrls(urls) {
   if (!fs.existsSync(localStorePath)) {
     fail(`Missing .local-store.json at ${localStorePath}`);
   }
 
   const payload = readJson(localStorePath);
-  const clients = JSON.parse(payload.clients || '[]');
-  const urls = new Set();
 
-  for (const client of clients) {
-    for (const url of Array.isArray(client.images) ? client.images : []) {
-      if (typeof url === 'string' && url.startsWith('/clients/')) {
-        urls.add(url);
-      }
+  for (const value of Object.values(payload)) {
+    if (typeof value !== 'string') {
+      collectMediaUrls(value, urls);
+      continue;
     }
 
-    for (const url of [client.thumbnailUrl, client.logo]) {
-      if (typeof url === 'string' && url.startsWith('/clients/')) {
-        urls.add(url);
-      }
+    try {
+      collectMediaUrls(JSON.parse(value), urls);
+    } catch {
+      collectMediaUrls(value, urls);
+    }
+  }
+}
+
+async function readApiReferencedUrls(urls) {
+  const response = await request('GET', '/api/home-data');
+  if (response.status < 200 || response.status >= 300) {
+    console.warn(`Could not read live home-data references: HTTP ${response.status}`);
+    return;
+  }
+
+  try {
+    collectMediaUrls(JSON.parse(response.body), urls);
+  } catch (error) {
+    console.warn(`Could not parse live home-data references: ${error.message}`);
+  }
+}
+
+async function readReferencedUrls() {
+  const urls = new Set();
+  readLocalReferencedUrls(urls);
+
+  if (apiBase) {
+    try {
+      await readApiReferencedUrls(urls);
+    } catch (error) {
+      console.warn(`Could not read live media references: ${error.message}`);
     }
   }
 
@@ -294,7 +349,7 @@ async function main() {
     fail(`API health check failed with status ${health.status}`);
   }
 
-  const referencedUrls = readReferencedUrls();
+  const referencedUrls = await readReferencedUrls();
   const fileIndex = buildFileIndex(sourceRoot);
   const resolvedTasks = [];
   const missing = [];

@@ -6,6 +6,43 @@ import { loadLatestWorkPosts } from '@/content/latestWork'
 import { buildMediaPreviewUrl, isVideoUrl } from '@/lib/mediaPreview'
 import { Filter, Instagram, Facebook, Mail, Phone } from 'lucide-react'
 
+const FOOTER_LOGO_SRC = '/apron-favicon.svg'
+const DEFAULT_SERVICE_IMAGES = ['/clients/site-content/services/services.jpg']
+
+const buildImageSource = (sourceUrl, options) => {
+  const source = typeof sourceUrl === 'string' ? sourceUrl.trim() : ''
+  if (!source) return { src: '', fallbackSrc: '' }
+
+  const preview = buildMediaPreviewUrl(source, options)
+  return {
+    src: preview || source,
+    fallbackSrc: preview && preview !== source ? source : '',
+  }
+}
+
+function ImageWithFallback({ src, fallbackSrc = '', placeholder = null, ...props }) {
+  const [failedUrls, setFailedUrls] = useState([])
+  const currentSrc = src && !failedUrls.includes(src)
+    ? src
+    : fallbackSrc && !failedUrls.includes(fallbackSrc)
+      ? fallbackSrc
+      : ''
+
+  if (!currentSrc) return placeholder
+
+  return (
+    <img
+      {...props}
+      src={currentSrc}
+      onError={() => {
+        setFailedUrls((prev) => (
+          prev.includes(currentSrc) ? prev : [...prev, currentSrc]
+        ))
+      }}
+    />
+  )
+}
+
 const mergeSiteText = (incoming) => {
   const defaults = loadSiteText()
 
@@ -150,12 +187,15 @@ function Home() {
   const mobileHeroImageUrl = buildMediaPreviewUrl(personalData?.mobileHeroImage, { width: 800, height: 1200, quality: 74 }) || personalData?.mobileHeroImage
   const activeHeroImageUrl = (isMobile && personalData?.mobileHeroImage) ? mobileHeroImageUrl : desktopHeroImageUrl
 
-  const aboutSectionImageUrl = buildMediaPreviewUrl(bioContent?.aboutImage, { width: 900, height: 900, quality: 72 }) || bioContent?.aboutImage
+  const aboutSectionImage = buildImageSource(bioContent?.aboutImage, { width: 900, height: 900, quality: 72 })
 
-  const servicesImages = bioContent?.servicesImages || []
-  const currentServiceImageUrl = servicesImages.length > 0
-    ? buildMediaPreviewUrl(servicesImages[currentServiceImageIndex], { width: 1200, height: 800, quality: 72 }) || servicesImages[currentServiceImageIndex]
-    : null
+  const configuredServicesImages = Array.isArray(bioContent?.servicesImages)
+    ? bioContent.servicesImages.filter(Boolean)
+    : []
+  const servicesImages = configuredServicesImages.length > 0 ? configuredServicesImages : DEFAULT_SERVICE_IMAGES
+  const currentServiceImage = servicesImages.length > 0
+    ? buildImageSource(servicesImages[currentServiceImageIndex], { width: 1200, height: 800, quality: 72 })
+    : { src: '', fallbackSrc: '' }
 
   const handleNextServiceImage = () => {
     if (servicesImages.length === 0) return
@@ -196,8 +236,16 @@ function Home() {
           <div className="about-image-container">
             <h2 className="about-image-title">{renderMultilineTitle(siteText.home.meetArtistTitle)}</h2>
             <div className="about-image">
-              {aboutSectionImageUrl ? (
-                <img src={aboutSectionImageUrl} alt="Andrea Abi Khalil" className="profile-image" loading="lazy" decoding="async" />
+              {aboutSectionImage.src ? (
+                <ImageWithFallback
+                  src={aboutSectionImage.src}
+                  fallbackSrc={aboutSectionImage.fallbackSrc}
+                  alt="Andrea Abi Khalil"
+                  className="profile-image"
+                  loading="lazy"
+                  decoding="async"
+                  placeholder={<div className="placeholder-image">{siteText.home.placeholderArtistPhoto}</div>}
+                />
               ) : (
                 <div className="placeholder-image">{siteText.home.placeholderArtistPhoto}</div>
               )}
@@ -216,27 +264,33 @@ function Home() {
             </p>
           </div>
           <div className="latest-work-grid">
-            {latestWorkPosts.map((post) => (
-              <article key={post.id} className="work-card">
-                <div className="work-image">
-                  {post.imageUrl ? (
-                    <img
-                      className="work-image-img"
-                      src={buildMediaPreviewUrl(post.imageUrl, { width: 960, height: 540, quality: 72 }) || post.imageUrl}
-                      alt={post.title}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  ) : (
-                    <div className="placeholder-image">{siteText.home.placeholderPicture}</div>
-                  )}
-                </div>
-                <div className="work-content">
-                  <h3 className="work-title">{post.title}</h3>
-                  <p className="work-excerpt">{post.excerpt}</p>
-                </div>
-              </article>
-            ))}
+            {latestWorkPosts.map((post) => {
+              const postImage = buildImageSource(post.imageUrl, { width: 960, height: 540, quality: 72 })
+
+              return (
+                <article key={post.id} className="work-card">
+                  <div className="work-image">
+                    {postImage.src ? (
+                      <ImageWithFallback
+                        className="work-image-img"
+                        src={postImage.src}
+                        fallbackSrc={postImage.fallbackSrc}
+                        alt={post.title}
+                        loading="lazy"
+                        decoding="async"
+                        placeholder={<div className="placeholder-image">{siteText.home.placeholderPicture}</div>}
+                      />
+                    ) : (
+                      <div className="placeholder-image">{siteText.home.placeholderPicture}</div>
+                    )}
+                  </div>
+                  <div className="work-content">
+                    <h3 className="work-title">{post.title}</h3>
+                    <p className="work-excerpt">{post.excerpt}</p>
+                  </div>
+                </article>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -377,13 +431,15 @@ function Home() {
             <button className="carousel-btn prev" onClick={handlePrevServiceImage}>&lt;</button>
             <div className="services-image-container">
               <div className="services-image">
-                {currentServiceImageUrl ? (
-                  <img
-                    src={currentServiceImageUrl}
+                {currentServiceImage.src ? (
+                  <ImageWithFallback
+                    src={currentServiceImage.src}
+                    fallbackSrc={currentServiceImage.fallbackSrc}
                     alt={`Service ${currentServiceImageIndex + 1}`}
                     className="service-carousel-img"
                     loading="lazy"
                     decoding="async"
+                    placeholder={<div className="placeholder-image large">{siteText.home.placeholderPicture}</div>}
                   />
                 ) : (
                   <div className="placeholder-image large">{siteText.home.placeholderPicture}</div>
@@ -422,7 +478,7 @@ function Home() {
         <div className="footer-container">
           <div className="footer-logo">
             <div className="logo-icon">
-              <div className="apron-placeholder">{siteText.footer.apronPlaceholder}</div>
+              <img src={FOOTER_LOGO_SRC} alt="Andrea FoodStylist apron logo" className="footer-logo-mark" />
             </div>
             <div className="logo-text">
               <span className="logo-andrea">{siteText.footer.logoPrimary}</span>

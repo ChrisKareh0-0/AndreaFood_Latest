@@ -27,8 +27,9 @@ const previewJobs = new Map();
 let databaseReady = false;
 let databaseError = pool ? null : 'DATABASE_URL is not configured';
 const localHeroImagePath = '/clients/site-content/personal/hero-image.png';
+const forceLocalContentFallback = process.env.ENABLE_LOCAL_CONTENT_FALLBACK === 'true';
 const enableLocalContentFallback =
-  process.env.ENABLE_LOCAL_CONTENT_FALLBACK === 'true' ||
+  forceLocalContentFallback ||
   (!pool && process.env.NODE_ENV !== 'production');
 const localContent = {
   personalData: {
@@ -357,18 +358,30 @@ function buildAdminStatsFromClientPayload(clients) {
 }
 
 function canUseLocalContentFallback() {
-  return enableLocalContentFallback && (!pool || !databaseReady);
+  return forceLocalContentFallback || (enableLocalContentFallback && (!pool || !databaseReady));
+}
+
+function loadLocalStorePayload() {
+  if (!fs.existsSync(localStorePath)) return {};
+
+  try {
+    return JSON.parse(fs.readFileSync(localStorePath, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalStorePayload(payload) {
+  fs.writeFileSync(localStorePath, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function readLocalStoreValue(payload, key, fallback = null) {
+  if (!Object.prototype.hasOwnProperty.call(payload, key)) return fallback;
+  return parseJson(payload[key], payload[key]);
 }
 
 function loadClientsFromLocalStore() {
-  if (!fs.existsSync(localStorePath)) return [];
-
-  try {
-    const payload = JSON.parse(fs.readFileSync(localStorePath, 'utf8'));
-    return parseJson(payload.clients, []);
-  } catch {
-    return [];
-  }
+  return parseJson(loadLocalStorePayload().clients, []);
 }
 
 function normalizeClient(input, fallbackId) {
@@ -511,9 +524,36 @@ function getLocalClientById(clientId, includeMedia = false) {
 }
 
 function getLocalAdminValue(key, fallback = null) {
+  const storedValue = readLocalStoreValue(loadLocalStorePayload(), key, null);
+  if (storedValue !== null) return storedValue;
+
   return Object.prototype.hasOwnProperty.call(localContent, key)
     ? localContent[key]
     : fallback;
+}
+
+function getLocalAdminData() {
+  const payload = loadLocalStorePayload();
+  const data = {};
+
+  for (const key of Object.keys(localContent)) {
+    data[key] = getLocalAdminValue(key, localContent[key]);
+  }
+
+  for (const key of Object.keys(payload)) {
+    if (key === 'clients') continue;
+    data[key] = readLocalStoreValue(payload, key, payload[key]);
+  }
+
+  return data;
+}
+
+function setLocalAdminValue(key, value) {
+  const payload = loadLocalStorePayload();
+  payload[key] = JSON.stringify(value);
+  writeLocalStorePayload(payload);
+  localContent[key] = value;
+  clearCache();
 }
 
 async function dbQuery(query, params = []) {
@@ -1149,6 +1189,10 @@ app.post('/api/admin-data', async (req, res) => {
   if (!key || value === undefined) {
     return res.status(400).json({ error: 'Missing key or value' });
   }
+  if (canUseLocalContentFallback()) {
+    setLocalAdminValue(key, value);
+    return res.json({ success: true, source: 'local-fallback' });
+  }
   if (!requireDatabase(res)) return;
 
   try {
@@ -1161,7 +1205,7 @@ app.post('/api/admin-data', async (req, res) => {
 
 app.get('/api/admin-data', async (req, res) => {
   if (canUseLocalContentFallback()) {
-    const response = { source: 'local-fallback', data: localContent };
+    const response = { source: 'local-fallback', data: getLocalAdminData() };
     setApiCache(res, 60);
     return res.json(response);
   }
@@ -1192,7 +1236,7 @@ app.get('/api/admin-data', async (req, res) => {
 
 app.get('/api/admin-data/all', async (req, res) => {
   if (canUseLocalContentFallback()) {
-    const rows = Object.entries(localContent).map(([key, value]) => ({
+    const rows = Object.entries(getLocalAdminData()).map(([key, value]) => ({
       key,
       value: JSON.stringify(value),
     }));
