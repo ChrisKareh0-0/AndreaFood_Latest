@@ -62,6 +62,25 @@ function BioManagement() {
     }));
   };
 
+  const saveLatestWorkPosts = async (posts) => {
+    const response = await fetch('/api/admin-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'latestWorkPosts', value: posts }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Save failed with status ${response.status}`;
+      try {
+        const payload = await response.json();
+        errorMessage = payload?.error || errorMessage;
+      } catch {
+        // Keep the status-based message.
+      }
+      throw new Error(errorMessage);
+    }
+  };
+
   const handleLatestWorkImageUpload = async (e, id) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -69,7 +88,13 @@ function BioManagement() {
     try {
       setUploadingPostId(id);
       const result = await uploadMediaFile(file, buildMediaFolder(latestWorkFolder, String(id)));
-      handleLatestWorkPostChange(id, 'imageUrl', result.url);
+      const currentPosts = Array.isArray(formData.latestWorkPosts) ? formData.latestWorkPosts : [];
+      const nextLatestWorkPosts = currentPosts.map((post) =>
+        post.id === id ? { ...post, imageUrl: result.url } : post
+      );
+      setFormData((prev) => ({ ...prev, latestWorkPosts: nextLatestWorkPosts }));
+      setLatestWorkPosts(nextLatestWorkPosts);
+      await saveLatestWorkPosts(nextLatestWorkPosts);
     } catch (err) {
       console.error('Failed to upload latest work image', err);
     } finally {
