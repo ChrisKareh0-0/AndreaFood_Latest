@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './MyWork.css'
+import { getCategoryNames } from '@/content/categories'
 import { loadSiteText } from '@/content/siteText'
 import { Filter } from 'lucide-react'
 
@@ -7,9 +8,37 @@ function MyWork() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeFilter, setActiveFilter] = useState('All')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [categories, setCategories] = useState(() => getCategoryNames(undefined, { includeAll: true }))
   const siteText = loadSiteText()
 
-  const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchCategories() {
+      try {
+        const res = await fetch('/api/admin-data/categories', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled) {
+          setCategories(getCategoryNames(data?.value, { includeAll: true }))
+        }
+      } catch {
+        // Keep default category filters.
+      }
+    }
+
+    fetchCategories()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!categories.includes(activeFilter)) {
+      setActiveFilter('All')
+    }
+  }, [activeFilter, categories])
 
   // Use latestWorkPosts from admin panel
   const clients = Array.isArray(window.latestWorkPosts) ? window.latestWorkPosts : [];

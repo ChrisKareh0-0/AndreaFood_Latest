@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import './Management.css'
+import { getCategoryNames } from '@/content/categories'
 import { buildMediaFolder, extractMediaFolderFromUrl, uploadMediaFile, uploadMediaFiles } from '@/lib/mediaUpload'
 import { isVideoUrl } from '@/lib/mediaPreview'
 
@@ -43,7 +44,7 @@ function ClientManagement({ showToast = noopToast }) {
     return 0
   })
 
-  const [categories] = useState(['TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media'])
+  const [categories, setCategories] = useState(() => getCategoryNames())
   const [showModal, setShowModal] = useState(false)
   const [editingClient, setEditingClient] = useState(null)
   const [formData, setFormData] = useState({
@@ -59,6 +60,29 @@ function ClientManagement({ showToast = noopToast }) {
     setFormData({ name: '', logo: '', images: [], categories: [], description: '' })
     setShowModal(true)
   }
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchCategories() {
+      try {
+        const res = await fetch('/api/admin-data/categories', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled) {
+          setCategories(getCategoryNames(data?.value))
+        }
+      } catch {
+        // Keep default category options.
+      }
+    }
+
+    fetchCategories()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleEdit = (client) => {
     setEditingClient(client)
@@ -213,6 +237,11 @@ function ClientManagement({ showToast = noopToast }) {
     }
     setShowModal(false)
   }
+
+  const categoryOptions = Array.from(new Set([
+    ...categories,
+    ...(Array.isArray(formData.categories) ? formData.categories : []),
+  ])).filter(Boolean)
 
   return (
     <div className="management-section">
@@ -393,7 +422,7 @@ function ClientManagement({ showToast = noopToast }) {
               <div className="form-group">
                 <label>Categories</label>
                 <div className="checkbox-group">
-                  {categories.map((category) => (
+                  {categoryOptions.map((category) => (
                     <label key={category} className="checkbox-label">
                       <input
                         type="checkbox"

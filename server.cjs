@@ -1137,6 +1137,7 @@ app.get('/api/home-data', async (req, res) => {
       bioContent: getLocalAdminValue('bioContent', {}),
       siteText: getLocalAdminValue('siteText', {}),
       latestWorkPosts: getLocalAdminValue('latestWorkPosts', []),
+      categories: getLocalAdminValue('categories', null),
       clients: clients.clients,
       clientsPagination: clients.pagination,
       source: 'local-fallback',
@@ -1162,6 +1163,7 @@ app.get('/api/home-data', async (req, res) => {
         { key: 'bioContent', fallback: {} },
         { key: 'siteText', fallback: {} },
         { key: 'latestWorkPosts', fallback: [] },
+        { key: 'categories', fallback: null },
       ]),
       listClients(),
     ]);
@@ -1171,6 +1173,7 @@ app.get('/api/home-data', async (req, res) => {
       bioContent: adminValues.bioContent || {},
       siteText: adminValues.siteText || {},
       latestWorkPosts: adminValues.latestWorkPosts || [],
+      categories: adminValues.categories || [],
       clients: clients.clients,
       clientsPagination: clients.pagination,
       source: 'database',

@@ -7,6 +7,7 @@ const API_KEYS = [
   { key: 'bioContent', label: 'Bio Content', description: 'About title, paragraphs, services description, contact info' },
   { key: 'siteText', label: 'Site Text', description: 'All UI strings — navigation, home page, footer, login' },
   { key: 'latestWorkPosts', label: 'Latest Work Posts', description: 'Array of work posts with id, title, excerpt, imageUrl' },
+  { key: 'categories', label: 'Categories', description: 'Category names, descriptions, and colors for filters and client tagging' },
   { key: 'personalData', label: 'Personal Data (localStorage)', description: 'Name, email, phone, social links, hero/profile images', localStorage: true },
 ]
 

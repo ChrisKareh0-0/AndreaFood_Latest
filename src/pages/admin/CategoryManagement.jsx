@@ -1,16 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { defaultCategories, normalizeCategories } from '@/content/categories'
 import './Management.css'
 
 const noopToast = () => {}
 
 function CategoryManagement({ showToast = noopToast }) {
-  const [categories, setCategories] = useState([
-    { id: 1, name: 'TVC', description: 'Television Commercial projects', color: '#4a7ba7' },
-    { id: 2, name: 'Photoshoot', description: 'Professional food photography', color: '#e89a3c' },
-    { id: 3, name: 'Commercial', description: 'Commercial food styling', color: '#2ecc71' },
-    { id: 4, name: 'Editorial', description: 'Editorial food photography', color: '#e74c3c' }
-  ])
-
+  const [categories, setCategories] = useState(() => normalizeCategories(defaultCategories))
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [formData, setFormData] = useState({
@@ -18,6 +15,81 @@ function CategoryManagement({ showToast = noopToast }) {
     description: '',
     color: '#4a7ba7'
   })
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchCategories() {
+      try {
+        setLoading(true)
+        const res = await fetch('/api/admin-data/categories', { cache: 'no-store' })
+
+        if (res.status === 404) {
+          if (!cancelled) {
+            setCategories(normalizeCategories(defaultCategories))
+          }
+          return
+        }
+
+        if (!res.ok) {
+          throw new Error(`Failed to load categories (${res.status})`)
+        }
+
+        const data = await res.json()
+        if (!cancelled) {
+          setCategories(normalizeCategories(data?.value))
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCategories(normalizeCategories(defaultCategories))
+          showToast(err.message || 'Failed to load categories', 'error')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchCategories()
+
+    return () => {
+      cancelled = true
+    }
+  }, [showToast])
+
+  const saveCategories = async (nextCategories, successMessage) => {
+    const normalizedCategories = normalizeCategories(nextCategories)
+    setSaving(true)
+
+    try {
+      const res = await fetch('/api/admin-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'categories', value: normalizedCategories }),
+      })
+
+      if (!res.ok) {
+        let errorMessage = `Save failed with status ${res.status}`
+        try {
+          const payload = await res.json()
+          errorMessage = payload?.error || errorMessage
+        } catch {
+          // Keep the status-based message.
+        }
+        throw new Error(errorMessage)
+      }
+
+      setCategories(normalizedCategories)
+      showToast(successMessage, 'success')
+      return true
+    } catch (err) {
+      showToast(err.message || 'Failed to save categories', 'error')
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const handleAdd = () => {
     setEditingCategory(null)
@@ -27,27 +99,67 @@ function CategoryManagement({ showToast = noopToast }) {
 
   const handleEdit = (category) => {
     setEditingCategory(category)
-    setFormData(category)
+    setFormData({
+      name: category.name || '',
+      description: category.description || '',
+      color: category.color || '#4a7ba7',
+    })
     setShowModal(true)
   }
 
-  const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this category? This will affect all associated items.')) {
-      setCategories(categories.filter(c => c.id !== id))
-      showToast('Category deleted successfully', 'success')
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this category? This will affect category options across the admin panel and website filters.')) {
+      return
+    }
+
+    const didSave = await saveCategories(
+      categories.filter(c => c.id !== id),
+      'Category deleted successfully'
+    )
+
+    if (didSave) {
+      setShowModal(false)
     }
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (editingCategory) {
-      setCategories(categories.map(c => c.id === editingCategory.id ? { ...formData, id: c.id } : c))
-      showToast('Category updated successfully!', 'success')
-    } else {
-      setCategories([...categories, { ...formData, id: Date.now() }])
-      showToast('Category added successfully!', 'success')
+
+    const nextCategory = {
+      id: editingCategory?.id ?? Date.now(),
+      name: formData.name.trim(),
+      description: formData.description.trim(),
+      color: formData.color || '#4a7ba7',
     }
-    setShowModal(false)
+
+    if (!nextCategory.name) {
+      showToast('Category name is required', 'error')
+      return
+    }
+
+    const duplicate = categories.some((category) => (
+      category.id !== editingCategory?.id
+      && category.name.toLowerCase() === nextCategory.name.toLowerCase()
+    ))
+
+    if (duplicate) {
+      showToast('A category with that name already exists', 'error')
+      return
+    }
+
+    const nextCategories = editingCategory
+      ? categories.map(c => c.id === editingCategory.id ? nextCategory : c)
+      : [...categories, nextCategory]
+
+    const didSave = await saveCategories(
+      nextCategories,
+      editingCategory ? 'Category updated successfully!' : 'Category added successfully!'
+    )
+
+    if (didSave) {
+      setShowModal(false)
+      setEditingCategory(null)
+    }
   }
 
   const colorOptions = [
@@ -65,36 +177,40 @@ function CategoryManagement({ showToast = noopToast }) {
     <div className="management-section">
       <div className="section-header">
         <h2>Category Management</h2>
-        <button className="btn-primary" onClick={handleAdd}>
+        <button className="btn-primary" onClick={handleAdd} disabled={saving}>
           <span>➕</span>
           Add New Category
         </button>
       </div>
 
-      <div className="categories-grid">
-        {categories.map((category) => (
-          <div key={category.id} className="category-card">
-            <div className="category-header" style={{ background: category.color }}>
-              <h3>{category.name}</h3>
-            </div>
-            <div className="category-body">
-              <p>{category.description}</p>
-              <div className="category-meta">
-                <span className="color-indicator" style={{ background: category.color }}></span>
-                <span className="color-code">{category.color}</span>
+      {loading ? (
+        <div>Loading categories...</div>
+      ) : (
+        <div className="categories-grid">
+          {categories.map((category) => (
+            <div key={category.id} className="category-card">
+              <div className="category-header" style={{ background: category.color }}>
+                <h3>{category.name}</h3>
+              </div>
+              <div className="category-body">
+                <p>{category.description || 'No description yet.'}</p>
+                <div className="category-meta">
+                  <span className="color-indicator" style={{ background: category.color }}></span>
+                  <span className="color-code">{category.color}</span>
+                </div>
+              </div>
+              <div className="category-actions">
+                <button className="btn-edit" onClick={() => handleEdit(category)} disabled={saving}>
+                  ✏️ Edit
+                </button>
+                <button className="btn-delete" onClick={() => handleDelete(category.id)} disabled={saving}>
+                  🗑️ Delete
+                </button>
               </div>
             </div>
-            <div className="category-actions">
-              <button className="btn-edit" onClick={() => handleEdit(category)}>
-                ✏️ Edit
-              </button>
-              <button className="btn-delete" onClick={() => handleDelete(category.id)}>
-                🗑️ Delete
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
@@ -119,7 +235,6 @@ function CategoryManagement({ showToast = noopToast }) {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows="4"
-                  required
                 ></textarea>
               </div>
               <div className="form-group">
@@ -144,11 +259,11 @@ function CategoryManagement({ showToast = noopToast }) {
                 </div>
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
-                  {editingCategory ? 'Update' : 'Add'} Category
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? 'Saving...' : `${editingCategory ? 'Update' : 'Add'} Category`}
                 </button>
               </div>
             </form>

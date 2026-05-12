@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import './Home.css'
 import { ClientsGallery } from '../components/ClientsGallery'
+import { getCategoryNames } from '@/content/categories'
 import { loadSiteText } from '@/content/siteText'
 import { loadLatestWorkPosts } from '@/content/latestWork'
 import { buildMediaPreviewUrl, isVideoUrl } from '@/lib/mediaPreview'
@@ -109,6 +110,7 @@ function Home() {
   const [siteText, setSiteText] = useState(() => mergeSiteText())
   const [latestWorkPosts, setLatestWorkPosts] = useState(() => loadLatestWorkPosts())
   const [clients, setClients] = useState([])
+  const [categories, setCategories] = useState(() => getCategoryNames(undefined, { includeAll: true }))
   const [searchTerm, setSearchTerm] = useState('')
   const [activeFilter, setActiveFilter] = useState('All')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
@@ -116,8 +118,6 @@ function Home() {
   const [currentServiceImageIndex, setCurrentServiceImageIndex] = useState(0)
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
   const itemsPerPage = 12
-
-  const categories = ['All', 'TVC', 'Photoshoot', 'Commercial', 'Editorial', 'Social Media']
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768)
@@ -180,6 +180,19 @@ function Home() {
         setBioContent(data?.bioContent || null)
         setSiteText(mergeSiteText(data?.siteText))
         setLatestWorkPosts(Array.isArray(data?.latestWorkPosts) ? data.latestWorkPosts : loadLatestWorkPosts())
+        let categoryData = data?.categories
+        if (categoryData === undefined) {
+          try {
+            const categoriesRes = await fetch('/api/admin-data/categories', { cache: 'no-store' })
+            if (categoriesRes.ok) {
+              const categoriesPayload = await categoriesRes.json()
+              categoryData = categoriesPayload?.value
+            }
+          } catch {
+            // Keep default categories when the optional categories key is unavailable.
+          }
+        }
+        setCategories(getCategoryNames(categoryData, { includeAll: true }))
         setClients(Array.isArray(data?.clients) ? data.clients : [])
       } catch (err) {
         console.error('Failed to load API data', err)
@@ -187,6 +200,12 @@ function Home() {
     }
     fetchAll()
   }, [])
+
+  useEffect(() => {
+    if (!categories.includes(activeFilter)) {
+      setActiveFilter('All')
+    }
+  }, [activeFilter, categories])
 
   const aboutTitle = bioContent?.aboutTitle || 'A Glimpse into the Journey..'
   const aboutParagraph1 = bioContent?.aboutParagraph1 ||
