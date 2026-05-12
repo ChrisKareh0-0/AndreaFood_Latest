@@ -53,9 +53,6 @@ export type SiteText = {
 
     copyrightPrefix: string
     allRightsReservedSuffix: string
-
-    poweredByPrefix: string
-    poweredByName: string
   }
   login: {
     title: string
@@ -129,10 +126,7 @@ export const defaultSiteText: SiteText = {
     logoSecondary: 'FoodStyle',
 
     copyrightPrefix: 'Copyright',
-    allRightsReservedSuffix: 'All Rights Reserved',
-
-    poweredByPrefix: 'Powered by',
-    poweredByName: 'FourthDimension'
+    allRightsReservedSuffix: 'All Rights Reserved'
   },
   login: {
     title: 'Admin Login',

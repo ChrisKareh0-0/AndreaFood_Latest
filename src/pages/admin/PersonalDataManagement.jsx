@@ -2,39 +2,100 @@ import { useState, useEffect } from 'react'
 import './Management.css'
 import { buildMediaFolder, uploadMediaFile } from '@/lib/mediaUpload'
 
-function PersonalDataManagement() {
+const noopToast = () => {}
+
+const emptyPersonalData = {
+  fullName: '',
+  title: '',
+  email: '',
+  phone: '',
+  instagram: '',
+  facebook: '',
+  heroImage: '',
+  mobileHeroImage: '',
+  profileImage: ''
+}
+
+function normalizePersonalData(value) {
+  const data = value && typeof value === 'object' ? value : {}
+
+  return {
+    ...emptyPersonalData,
+    ...data,
+    fullName: data.fullName || '',
+    title: data.title || '',
+    email: data.email || '',
+    phone: data.phone || '',
+    instagram: data.instagram || '',
+    facebook: data.facebook || '',
+    heroImage: data.heroImage || '',
+    mobileHeroImage: data.mobileHeroImage || '',
+    profileImage: data.profileImage || ''
+  }
+}
+
+function AdminImagePreview({ src, fallbackSrc = '', alt, compact = false, missingMessage = 'Image could not be loaded.' }) {
+  const [failedSrc, setFailedSrc] = useState('')
+  const [failedFallbackSrc, setFailedFallbackSrc] = useState('')
+  const sourceFailed = Boolean(src) && failedSrc === src
+  const fallbackFailed = Boolean(fallbackSrc) && failedFallbackSrc === fallbackSrc
+  const activeSrc = !sourceFailed && src ? src : fallbackSrc
+
+  if (!activeSrc || (sourceFailed && (!fallbackSrc || fallbackFailed))) {
+    return <span className="image-preview-status">{missingMessage}</span>
+  }
+
+  const isShowingFallback = sourceFailed && activeSrc === fallbackSrc
+
+  return (
+    <div className={compact ? 'image-preview image-preview--compact' : 'image-preview'}>
+      <img
+        src={activeSrc}
+        alt={alt}
+        onError={() => {
+          if (activeSrc === fallbackSrc) {
+            setFailedFallbackSrc(fallbackSrc)
+          } else {
+            setFailedSrc(activeSrc)
+          }
+        }}
+      />
+      {isShowingFallback ? (
+        <div className="image-preview-warning">
+          Mobile image not found. Showing hero image fallback.
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function PersonalDataManagement({ showToast = noopToast }) {
   const [personalData, setPersonalData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [uploadingField, setUploadingField] = useState('')
-  const [formData, setFormData] = useState({
-    fullName: '',
-    title: '',
-    email: '',
-    phone: '',
-    instagram: '',
-    facebook: '',
-    heroImage: '',
-    mobileHeroImage: ''
-  })
+  const [formData, setFormData] = useState(emptyPersonalData)
   const personalMediaFolder = buildMediaFolder('site-content', 'personal-data')
 
   useEffect(() => {
     const fetchPersonalData = async () => {
       try {
         const res = await fetch('/api/admin-data/personalData')
-        if (res.ok) {
-          const data = await res.json()
-          setPersonalData(data.value)
-          setFormData(data.value)
+        if (!res.ok) {
+          throw new Error(`Failed to load personal data (${res.status})`)
         }
+        const data = await res.json()
+        const nextPersonalData = normalizePersonalData(data.value)
+        setPersonalData(nextPersonalData)
+        setFormData(nextPersonalData)
       } catch (err) {
         console.error('Failed to fetch personal data', err)
+        showToast(err.message || 'Failed to load personal data', 'error')
       }
       setLoading(false)
     }
     fetchPersonalData()
-  }, [])
+  }, [showToast])
 
   const handleFileUpload = async (e, field) => {
     const file = e.target.files[0]
@@ -45,8 +106,10 @@ function PersonalDataManagement() {
         setUploadingField(field)
         const result = await uploadMediaFile(file, personalMediaFolder)
         setFormData(prev => ({ ...prev, [field]: result.url }))
+        showToast('Personal image uploaded successfully', 'success')
       } catch (err) {
         console.error('Failed to upload personal image', err)
+        showToast(err.message || 'Failed to upload personal image', 'error')
       } finally {
         setUploadingField('')
       }
@@ -64,15 +127,31 @@ function PersonalDataManagement() {
       if (res.ok) {
         setPersonalData(formData)
         setIsEditing(false)
+        showToast('Personal data saved successfully', 'success')
+      } else {
+        let errorMessage = `Save failed with status ${res.status}`
+        try {
+          const payload = await res.json()
+          errorMessage = payload?.error || errorMessage
+        } catch {
+          // Keep the status-based message.
+        }
+        throw new Error(errorMessage)
       }
     } catch (err) {
       console.error('Failed to save personal data', err)
+      showToast(err.message || 'Failed to save personal data', 'error')
     }
   }
 
   const handleCancel = () => {
-    setFormData(personalData)
+    setFormData(normalizePersonalData(personalData))
     setIsEditing(false)
+  }
+
+  const handleEdit = () => {
+    setFormData(normalizePersonalData(personalData))
+    setIsEditing(true)
   }
 
   if (loading) {
@@ -84,7 +163,7 @@ function PersonalDataManagement() {
       <div className="section-header">
         <h2>Personal Data</h2>
         {!isEditing ? (
-          <button className="btn-primary" onClick={() => setIsEditing(true)}>
+          <button className="btn-primary" onClick={handleEdit}>
             <span>✏️</span>
             Edit Information
           </button>
@@ -136,9 +215,7 @@ function PersonalDataManagement() {
                 <span className="data-label">Hero Image:</span>
                 <div className="data-value">
                   {personalData?.heroImage ? (
-                    <div className="image-preview image-preview--compact">
-                      <img src={personalData.heroImage} alt="Hero preview" />
-                    </div>
+                    <AdminImagePreview src={personalData.heroImage} alt="Hero preview" compact />
                   ) : (
                     'Not set'
                   )}
@@ -148,9 +225,12 @@ function PersonalDataManagement() {
                 <span className="data-label">Mobile Hero Image:</span>
                 <div className="data-value">
                   {personalData?.mobileHeroImage ? (
-                    <div className="image-preview image-preview--compact">
-                      <img src={personalData.mobileHeroImage} alt="Mobile Hero preview" />
-                    </div>
+                    <AdminImagePreview
+                      src={personalData.mobileHeroImage}
+                      fallbackSrc={personalData.heroImage}
+                      alt="Mobile Hero preview"
+                      compact
+                    />
                   ) : (
                     'Not set'
                   )}
@@ -167,7 +247,7 @@ function PersonalDataManagement() {
                   <label>Full Name</label>
                   <input
                     type="text"
-                    value={formData.fullName}
+                    value={formData.fullName || ''}
                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                     required
                   />
@@ -176,7 +256,7 @@ function PersonalDataManagement() {
                   <label>Title</label>
                   <input
                     type="text"
-                    value={formData.title}
+                    value={formData.title || ''}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     required
                   />
@@ -189,7 +269,7 @@ function PersonalDataManagement() {
                   <label>Email</label>
                   <input
                     type="email"
-                    value={formData.email}
+                    value={formData.email || ''}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
                   />
@@ -198,7 +278,7 @@ function PersonalDataManagement() {
                   <label>Phone</label>
                   <input
                     type="text"
-                    value={formData.phone}
+                    value={formData.phone || ''}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     required
                   />
@@ -211,7 +291,7 @@ function PersonalDataManagement() {
                   <label>Instagram</label>
                   <input
                     type="text"
-                    value={formData.instagram}
+                    value={formData.instagram || ''}
                     onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
                   />
                 </div>
@@ -219,7 +299,7 @@ function PersonalDataManagement() {
                   <label>Facebook</label>
                   <input
                     type="text"
-                    value={formData.facebook}
+                    value={formData.facebook || ''}
                     onChange={(e) => setFormData({ ...formData, facebook: e.target.value })}
                   />
                 </div>
@@ -231,7 +311,7 @@ function PersonalDataManagement() {
                   <label>Hero Image</label>
                   <input
                     type="text"
-                    value={formData.heroImage}
+                    value={formData.heroImage || ''}
                     onChange={(e) => setFormData({ ...formData, heroImage: e.target.value })}
                     placeholder="Enter hero image URL or upload below"
                   />
@@ -247,9 +327,7 @@ function PersonalDataManagement() {
                     </label>
                     {uploadingField === 'heroImage' ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
                     {formData.heroImage && (
-                      <div className="image-preview">
-                        <img src={formData.heroImage} alt="Hero preview" />
-                      </div>
+                      <AdminImagePreview src={formData.heroImage} alt="Hero preview" />
                     )}
                   </div>
                 </div>
@@ -273,9 +351,11 @@ function PersonalDataManagement() {
                     </label>
                     {uploadingField === 'mobileHeroImage' ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
                     {formData.mobileHeroImage && (
-                      <div className="image-preview">
-                        <img src={formData.mobileHeroImage} alt="Mobile Hero preview" />
-                      </div>
+                      <AdminImagePreview
+                        src={formData.mobileHeroImage}
+                        fallbackSrc={formData.heroImage}
+                        alt="Mobile Hero preview"
+                      />
                     )}
                   </div>
                 </div>

@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
 import './Management.css'
-import { useToast } from '../../hooks/useToast'
-import { ToastContainer } from '../../components/Toast'
 import { buildMediaFolder, extractMediaFolderFromUrl, uploadMediaFile, uploadMediaFiles } from '@/lib/mediaUpload'
 import { isVideoUrl } from '@/lib/mediaPreview'
 
-function ClientManagement() {
-  const { toasts, showToast, removeToast } = useToast()
+const noopToast = () => {}
+
+function ClientManagement({ showToast = noopToast }) {
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState(() => {
@@ -24,14 +23,14 @@ function ClientManagement() {
         const res = await fetch('/api/clients?includeMedia=true')
         const data = await res.json()
         setClients(data.clients || [])
-      } catch (err) {
+      } catch {
         showToast('Failed to load clients', 'error')
       } finally {
         setLoading(false)
       }
     }
     fetchClients()
-  }, [])
+  }, [showToast])
 
   const sortedClients = [...clients].sort((a, b) => {
     if (sortBy === 'alphabet') {
@@ -84,7 +83,7 @@ function ClientManagement() {
       } else {
         showToast('Failed to delete client', 'error')
       }
-    } catch (err) {
+    } catch {
       showToast('Failed to delete client', 'error')
     }
   }
@@ -132,6 +131,7 @@ function ClientManagement() {
     try {
       const result = await uploadMediaFile(file, clientFolder)
       setFormData(prev => ({ ...prev, [field]: result.url }))
+      showToast('Media uploaded successfully', 'success')
     } catch (err) {
       showToast(err.message || 'Failed to upload media', 'error')
     }
@@ -157,6 +157,7 @@ function ClientManagement() {
         ...prev,
         images: [...prev.images, ...uploadedFiles.map(file => file.url)]
       }))
+      showToast(`${uploadedFiles.length} media item${uploadedFiles.length === 1 ? '' : 's'} uploaded successfully`, 'success')
     } catch (err) {
       showToast(err.message || 'Failed to upload gallery media', 'error')
     }
@@ -188,7 +189,7 @@ function ClientManagement() {
         } else {
           showToast(data.error || 'Failed to update client', 'error')
         }
-      } catch (err) {
+      } catch {
         showToast('Failed to update client', 'error')
       }
     } else {
@@ -206,7 +207,7 @@ function ClientManagement() {
         } else {
           showToast(data.error || 'Failed to add client', 'error')
         }
-      } catch (err) {
+      } catch {
         showToast('Failed to add client', 'error')
       }
     }
@@ -215,7 +216,6 @@ function ClientManagement() {
 
   return (
     <div className="management-section">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="section-header">
         <h2>Client Management</h2>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>

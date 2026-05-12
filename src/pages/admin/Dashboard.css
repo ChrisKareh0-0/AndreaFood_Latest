@@ -30,14 +30,19 @@
 .sidebar-logo-icon {
   width: 50px;
   height: 50px;
-  background: linear-gradient(135deg, #4a7ba7, #6ba3d0);
+  background: rgba(247, 251, 253, 0.96);
   border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.8rem;
-  font-weight: 700;
-  box-shadow: 0 4px 15px rgba(74, 123, 167, 0.4);
+  box-shadow: 0 4px 15px rgba(74, 123, 167, 0.28);
+}
+
+.sidebar-logo-icon img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  display: block;
 }
 
 .sidebar-logo-text {

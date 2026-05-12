@@ -6,7 +6,7 @@ import { loadLatestWorkPosts } from '@/content/latestWork'
 import { buildMediaPreviewUrl, isVideoUrl } from '@/lib/mediaPreview'
 import { Filter, Instagram, Facebook, Mail, Phone } from 'lucide-react'
 
-const FOOTER_LOGO_SRC = '/apron-favicon.svg'
+const FOOTER_LOGO_SRC = '/andrea-foodstyle-monogram.png'
 const DEFAULT_SERVICE_IMAGES = ['/clients/site-content/services/services.jpg']
 
 const buildImageSource = (sourceUrl, options) => {
@@ -478,7 +478,7 @@ function Home() {
         <div className="footer-container">
           <div className="footer-logo">
             <div className="logo-icon">
-              <img src={FOOTER_LOGO_SRC} alt="Andrea FoodStylist apron logo" className="footer-logo-mark" />
+              <img src={FOOTER_LOGO_SRC} alt="Andrea FoodStyle monogram" className="footer-logo-mark" />
             </div>
             <div className="logo-text">
               <span className="logo-andrea">{siteText.footer.logoPrimary}</span>
@@ -509,10 +509,6 @@ function Home() {
         <div className="footer-bottom">
           <p>
             {siteText.footer.copyrightPrefix} <strong>{fullName}</strong> {siteText.footer.allRightsReservedSuffix}
-          </p>
-          <p>
-            {siteText.footer.poweredByPrefix}{' '}
-            <span className="fourth-dimension">{siteText.footer.poweredByName}</span>
           </p>
         </div>
       </footer>

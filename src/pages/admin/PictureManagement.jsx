@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import './Management.css'
-import { useToast } from '../../hooks/useToast'
-import { ToastContainer } from '../../components/Toast'
 
-function PictureManagement() {
-  const { toasts, showToast, removeToast } = useToast()
+const noopToast = () => {}
+
+function PictureManagement({ showToast = noopToast }) {
   const [pictures, setPictures] = useState([])
   const [loading, setLoading] = useState(true)
   // Fetch pictures from backend on mount
@@ -18,14 +17,14 @@ function PictureManagement() {
         } else {
           setPictures([])
         }
-      } catch (err) {
+      } catch {
         showToast('Failed to load pictures', 'error')
       } finally {
         setLoading(false)
       }
     }
     fetchPictures()
-  }, [])
+  }, [showToast])
 
   const [showModal, setShowModal] = useState(false)
   const [editingPicture, setEditingPicture] = useState(null)
@@ -63,7 +62,7 @@ function PictureManagement() {
       } else {
         showToast('Failed to delete picture', 'error')
       }
-    } catch (err) {
+    } catch {
       showToast('Failed to delete picture', 'error')
     }
   }
@@ -89,14 +88,13 @@ function PictureManagement() {
       } else {
         showToast('Failed to save picture', 'error')
       }
-    } catch (err) {
+    } catch {
       showToast('Failed to save picture', 'error')
     }
   }
 
   return (
     <div className="management-section">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="section-header">
         <h2>Picture Management</h2>
         <button className="btn-primary" onClick={handleAdd}>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PictureManagement from './PictureManagement'
 import PersonalDataManagement from './PersonalDataManagement'
@@ -8,9 +8,12 @@ import CategoryManagement from './CategoryManagement'
 import APITest from './APITest.jsx'
 import ClientsAPITest from './ClientsAPITest.jsx'
 import DatabaseViewer from './DatabaseViewer'
+import { ToastContainer } from '../../components/Toast'
+import { useToast } from '../../hooks/useToast'
 import './Dashboard.css'
 
 function Dashboard() {
+  const { toasts, showToast, removeToast } = useToast()
   const [activeSection, setActiveSection] = useState('overview')
   const [overviewStats, setOverviewStats] = useState({
     totalClients: 0,
@@ -24,6 +27,7 @@ function Dashboard() {
   const [statsLoading, setStatsLoading] = useState(true)
   const [statsError, setStatsError] = useState('')
   const [statsUpdatedAt, setStatsUpdatedAt] = useState('')
+  const hasShownStatsError = useRef(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -52,6 +56,7 @@ function Dashboard() {
         const stats = data?.stats || {}
 
         if (cancelled) return
+        hasShownStatsError.current = false
 
         setOverviewStats({
           totalClients: Number(stats.totalClients || 0),
@@ -65,7 +70,12 @@ function Dashboard() {
         setStatsUpdatedAt(typeof data?.timestamp === 'string' ? data.timestamp : '')
       } catch (error) {
         if (!cancelled) {
-          setStatsError(error.message || 'Failed to load overview stats')
+          const message = error.message || 'Failed to load overview stats'
+          setStatsError(message)
+          if (!hasShownStatsError.current) {
+            showToast(message, 'error')
+            hasShownStatsError.current = true
+          }
         }
       } finally {
         if (!cancelled) {
@@ -81,7 +91,7 @@ function Dashboard() {
       cancelled = true
       clearInterval(interval)
     }
-  }, [])
+  }, [showToast])
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated')
@@ -113,10 +123,13 @@ function Dashboard() {
 
   return (
     <div className="admin-dashboard">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <aside className="admin-sidebar">
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <div className="sidebar-logo-icon">A</div>
+            <div className="sidebar-logo-icon">
+              <img src="/andrea-foodstyle-favicon.png" alt="Andrea FoodStyle monogram" />
+            </div>
             <div className="sidebar-logo-text">
               <span>Andrea</span>
               <small>Admin Panel</small>
@@ -206,14 +219,14 @@ function Dashboard() {
             </div>
           )}
 
-          {activeSection === 'pictures' && <PictureManagement />}
-          {activeSection === 'personal-data' && <PersonalDataManagement />}
-          {activeSection === 'bio' && <BioManagement />}
-          {activeSection === 'clients' && <ClientManagement />}
-          {activeSection === 'categories' && <CategoryManagement />}
-          {activeSection === 'database' && <DatabaseViewer />}
-          {activeSection === 'api-test' && <APITest />}
-          {activeSection === 'clients-api' && <ClientsAPITest />}
+          {activeSection === 'pictures' && <PictureManagement showToast={showToast} />}
+          {activeSection === 'personal-data' && <PersonalDataManagement showToast={showToast} />}
+          {activeSection === 'bio' && <BioManagement showToast={showToast} />}
+          {activeSection === 'clients' && <ClientManagement showToast={showToast} />}
+          {activeSection === 'categories' && <CategoryManagement showToast={showToast} />}
+          {activeSection === 'database' && <DatabaseViewer showToast={showToast} />}
+          {activeSection === 'api-test' && <APITest showToast={showToast} />}
+          {activeSection === 'clients-api' && <ClientsAPITest showToast={showToast} />}
         </div>
       </main>
     </div>

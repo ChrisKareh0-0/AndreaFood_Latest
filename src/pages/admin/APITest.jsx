@@ -10,7 +10,9 @@ const API_KEYS = [
   { key: 'personalData', label: 'Personal Data (localStorage)', description: 'Name, email, phone, social links, hero/profile images', localStorage: true },
 ]
 
-function APITest() {
+const noopToast = () => {}
+
+function APITest({ showToast = noopToast }) {
   const [endpoint, setEndpoint] = useState('/api/admin-data/bioContent')
   const [method, setMethod] = useState('GET')
   const [body, setBody] = useState('')
@@ -42,8 +44,10 @@ function APITest() {
       } catch {
         setResponse(text)
       }
+      showToast(`${reqMethod} ${url} returned ${res.status}`, res.ok ? 'success' : 'warning')
     } catch (err) {
       setError(err.message)
+      showToast(err.message || 'API request failed', 'error')
     } finally {
       setLoading(false)
     }

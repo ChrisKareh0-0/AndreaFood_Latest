@@ -3,10 +3,80 @@ import { defaultSiteText } from '@/content/siteText';
 import './Management.css';
 import { buildMediaFolder, uploadMediaFile, uploadMediaFiles } from '@/lib/mediaUpload';
 
-function BioManagement() {
+const noopToast = () => {};
+
+const emptyBioContent = {
+  aboutTitle: '',
+  aboutParagraph1: '',
+  aboutParagraph2: '',
+  aboutImage: '',
+  servicesDescription: '',
+  servicesImages: [],
+  contactSubtitle: '',
+  contactDescription: '',
+};
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeBioContent(value) {
+  const data = isPlainObject(value) ? value : {};
+
+  return {
+    ...emptyBioContent,
+    ...data,
+    aboutTitle: data.aboutTitle || '',
+    aboutParagraph1: data.aboutParagraph1 || '',
+    aboutParagraph2: data.aboutParagraph2 || '',
+    aboutImage: data.aboutImage || '',
+    servicesDescription: data.servicesDescription || '',
+    servicesImages: Array.isArray(data.servicesImages) ? data.servicesImages.filter(Boolean) : [],
+    contactSubtitle: data.contactSubtitle || '',
+    contactDescription: data.contactDescription || '',
+  };
+}
+
+function mergeSiteText(value) {
+  const data = isPlainObject(value) ? value : {};
+
+  return Object.keys(defaultSiteText).reduce((result, section) => {
+    result[section] = {
+      ...defaultSiteText[section],
+      ...(isPlainObject(data[section]) ? data[section] : {}),
+    };
+    return result;
+  }, {});
+}
+
+function normalizeLatestWorkPosts(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((post) => isPlainObject(post))
+    .map((post, index) => ({
+      id: typeof post.id === 'number' ? post.id : Date.now() + index,
+      title: post.title || '',
+      excerpt: post.excerpt || '',
+      imageUrl: post.imageUrl || '',
+    }));
+}
+
+function buildBioFormData(content, siteText, latestWorkPosts) {
+  return {
+    ...normalizeBioContent(content),
+    siteText: mergeSiteText(siteText),
+    latestWorkPosts: normalizeLatestWorkPosts(latestWorkPosts),
+  };
+}
+
+function BioManagement({ showToast = noopToast }) {
   const [content, setContent] = useState(null);
   const [siteText, setSiteText] = useState(null);
   const [latestWorkPosts, setLatestWorkPosts] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [uploadingPostId, setUploadingPostId] = useState(null);
   const [isUploadingAboutImage, setIsUploadingAboutImage] = useState(false);
@@ -25,20 +95,22 @@ function BioManagement() {
         const bioData = bioRes.ok ? await bioRes.json() : null;
         const siteTextData = siteTextRes.ok ? await siteTextRes.json() : null;
         const latestWorkData = latestWorkRes.ok ? await latestWorkRes.json() : null;
-        setContent(bioData?.value || {});
-        setSiteText(siteTextData?.value || {});
-        setLatestWorkPosts(latestWorkData?.value || []);
-        setFormData({
-          ...(bioData?.value || {}),
-          siteText: siteTextData?.value || {},
-          latestWorkPosts: latestWorkData?.value || [],
-        });
+        const nextContent = normalizeBioContent(bioData?.value);
+        const nextSiteText = mergeSiteText(siteTextData?.value);
+        const nextLatestWorkPosts = normalizeLatestWorkPosts(latestWorkData?.value);
+
+        setContent(nextContent);
+        setSiteText(nextSiteText);
+        setLatestWorkPosts(nextLatestWorkPosts);
+        setFormData(buildBioFormData(nextContent, nextSiteText, nextLatestWorkPosts));
       } catch {
-        // show error or keep empty
+        showToast('Failed to load bio content', 'error');
+      } finally {
+        setLoading(false);
       }
     }
     fetchAdminData();
-  }, []);
+  }, [showToast]);
 
   const handleSiteTextChange = (section, field, value) => {
     setFormData((prev) => ({
@@ -46,7 +118,7 @@ function BioManagement() {
       siteText: {
         ...prev.siteText,
         [section]: {
-          ...prev.siteText[section],
+          ...(prev.siteText?.[section] || {}),
           [field]: value,
         },
       },
@@ -56,7 +128,7 @@ function BioManagement() {
   const handleLatestWorkPostChange = (id, field, value) => {
     setFormData((prev) => ({
       ...prev,
-      latestWorkPosts: prev.latestWorkPosts.map((p) =>
+      latestWorkPosts: (prev.latestWorkPosts || []).map((p) =>
         p.id === id ? { ...p, [field]: value } : p
       ),
     }));
@@ -95,8 +167,10 @@ function BioManagement() {
       setFormData((prev) => ({ ...prev, latestWorkPosts: nextLatestWorkPosts }));
       setLatestWorkPosts(nextLatestWorkPosts);
       await saveLatestWorkPosts(nextLatestWorkPosts);
+      showToast('Latest work image uploaded successfully', 'success');
     } catch (err) {
       console.error('Failed to upload latest work image', err);
+      showToast(err.message || 'Failed to upload latest work image', 'error');
     } finally {
       setUploadingPostId(null);
     }
@@ -110,8 +184,10 @@ function BioManagement() {
       setIsUploadingAboutImage(true);
       const result = await uploadMediaFile(file, aboutMediaFolder);
       setFormData((prev) => ({ ...prev, aboutImage: result.url }));
+      showToast('About image uploaded successfully', 'success');
     } catch (err) {
       console.error('Failed to upload about image', err);
+      showToast(err.message || 'Failed to upload about image', 'error');
     } finally {
       setIsUploadingAboutImage(false);
     }
@@ -129,8 +205,10 @@ function BioManagement() {
         ...prev,
         servicesImages: [...(prev.servicesImages || []), ...newUrls]
       }));
+      showToast(`${results.length} service image${results.length === 1 ? '' : 's'} uploaded successfully`, 'success');
     } catch (err) {
       console.error('Failed to upload services images', err);
+      showToast(err.message || 'Failed to upload services images', 'error');
     } finally {
       setIsUploadingServicesImages(false);
     }
@@ -152,14 +230,14 @@ function BioManagement() {
     };
     setFormData((prev) => ({
       ...prev,
-      latestWorkPosts: [...prev.latestWorkPosts, newPost],
+      latestWorkPosts: [...(prev.latestWorkPosts || []), newPost],
     }));
   };
 
   const handleDeleteLatestWorkPost = (id) => {
     setFormData((prev) => ({
       ...prev,
-      latestWorkPosts: prev.latestWorkPosts.filter((p) => p.id !== id),
+      latestWorkPosts: (prev.latestWorkPosts || []).filter((p) => p.id !== id),
     }));
   };
 
@@ -178,7 +256,7 @@ function BioManagement() {
       latestWorkPosts: nextLatestWorkPosts,
     } = formData;
 
-    const nextBio = {
+    const nextBio = normalizeBioContent({
       aboutTitle,
       aboutParagraph1,
       aboutParagraph2,
@@ -187,11 +265,13 @@ function BioManagement() {
       servicesImages,
       contactSubtitle,
       contactDescription,
-    };
+    });
+    const normalizedSiteText = mergeSiteText(nextSiteText);
+    const normalizedLatestWorkPosts = normalizeLatestWorkPosts(nextLatestWorkPosts);
 
     setContent(nextBio);
-    setSiteText(nextSiteText);
-    setLatestWorkPosts(nextLatestWorkPosts);
+    setSiteText(normalizedSiteText);
+    setLatestWorkPosts(normalizedLatestWorkPosts);
 
     try {
       const responses = await Promise.all([
@@ -203,36 +283,48 @@ function BioManagement() {
         fetch('/api/admin-data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'siteText', value: nextSiteText }),
+          body: JSON.stringify({ key: 'siteText', value: normalizedSiteText }),
         }),
         fetch('/api/admin-data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'latestWorkPosts', value: nextLatestWorkPosts }),
+          body: JSON.stringify({ key: 'latestWorkPosts', value: normalizedLatestWorkPosts }),
         }),
       ]);
 
       if (responses.every((response) => response.ok)) {
         setIsEditing(false);
+        showToast('Bio content saved successfully', 'success');
       } else {
         console.error('One or more content saves failed');
+        showToast('Failed to save all bio content changes', 'error');
       }
     } catch (err) {
       console.error('Failed to save content', err);
+      showToast(err.message || 'Failed to save content', 'error');
     }
   };
 
   const handleCancel = () => {
-    setFormData({ ...content, siteText, latestWorkPosts });
+    setFormData(buildBioFormData(content, siteText, latestWorkPosts));
     setIsEditing(false);
   };
+
+  const handleEdit = () => {
+    setFormData(buildBioFormData(content, siteText, latestWorkPosts));
+    setIsEditing(true);
+  };
+
+  if (loading) {
+    return <div className="management-section"><div>Loading bio content...</div></div>;
+  }
 
   return (
     <div className="management-section">
       <div className="section-header">
         <h2>Bio & Content Management</h2>
         {!isEditing ? (
-          <button className="btn-primary" onClick={() => setIsEditing(true)}>
+          <button className="btn-primary" onClick={handleEdit}>
             <span>✏️</span>
             Edit Content
           </button>

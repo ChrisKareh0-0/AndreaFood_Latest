@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import './Management.css'
 
-function ClientsAPITest() {
+const noopToast = () => {}
+
+function ClientsAPITest({ showToast = noopToast }) {
   const [response, setResponse] = useState(null)
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -28,8 +30,10 @@ function ClientsAPITest() {
       setStatus(res.status)
       const json = await res.json()
       setResponse(JSON.stringify(json, null, 2))
+      showToast(`${method} ${url} returned ${res.status}`, res.ok ? 'success' : 'warning')
     } catch (err) {
       setError(err.message)
+      showToast(err.message || 'Client API request failed', 'error')
     } finally {
       setLoading(false)
     }

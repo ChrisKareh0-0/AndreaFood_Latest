@@ -37,7 +37,9 @@ function Login() {
         <div className="login-card">
           <div className="login-header">
             <div className="login-logo">
-              <div className="login-logo-icon">A</div>
+              <div className="login-logo-icon">
+                <img src="/andrea-foodstyle-favicon.png" alt="Andrea FoodStyle monogram" />
+              </div>
             </div>
             <h1 className="login-title">{siteText.login.title}</h1>
             <p className="login-subtitle">{siteText.login.subtitle}</p>

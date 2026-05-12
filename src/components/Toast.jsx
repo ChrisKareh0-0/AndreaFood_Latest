@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import './Toast.css'
 
 function Toast({ message, type = 'info', onClose }) {
@@ -24,10 +24,10 @@ function Toast({ message, type = 'info', onClose }) {
     }
 
     return (
-        <div className={`toast toast--${type}`}>
+        <div className={`toast toast--${type}`} role="status" aria-live="polite">
             <div className="toast__icon">{getIcon()}</div>
             <div className="toast__message">{message}</div>
-            <button className="toast__close" onClick={onClose}>
+            <button className="toast__close" type="button" aria-label="Dismiss notification" onClick={onClose}>
                 ×
             </button>
         </div>

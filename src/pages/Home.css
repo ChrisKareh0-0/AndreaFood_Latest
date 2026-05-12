@@ -132,10 +132,6 @@ html.dark-mode .footer p {
   color: var(--text-secondary);
 }
 
-html.dark-mode .fourth-dimension {
-  color: var(--accent-color);
-}
-
 /* Override #d4e3ed elements in dark mode */
 html.dark-mode .about-section,
 html.dark-mode .latest-work-section,
@@ -1027,11 +1023,6 @@ html.dark-mode .about-section {
 
 .footer-bottom p {
   margin: 0.5rem 0;
-}
-
-.fourth-dimension {
-  color: #5a9fd4;
-  font-weight: 600;
 }
 
 /* Responsive Design */

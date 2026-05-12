@@ -1,17 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import './Management.css'
 
-function DatabaseViewer() {
+const noopToast = () => {}
+
+function DatabaseViewer({ showToast = noopToast }) {
   const [databaseData, setDatabaseData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [expandedKeys, setExpandedKeys] = useState({})
 
-  useEffect(() => {
-    fetchDatabaseData()
-  }, [])
-
-  const fetchDatabaseData = async () => {
+  const fetchDatabaseData = useCallback(async ({ notify = false } = {}) => {
     try {
       setLoading(true)
       setError(null)
@@ -21,12 +19,20 @@ function DatabaseViewer() {
       }
       const data = await res.json()
       setDatabaseData(data.rows || [])
+      if (notify) {
+        showToast('Database data refreshed', 'success')
+      }
     } catch (err) {
       setError(err.message)
+      showToast(err.message || 'Failed to load database data', 'error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
+
+  useEffect(() => {
+    fetchDatabaseData()
+  }, [fetchDatabaseData])
 
   const toggleExpand = (key) => {
     setExpandedKeys(prev => ({
@@ -66,9 +72,13 @@ function DatabaseViewer() {
     return typeMap[key] || key
   }
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text)
-    alert('Copied to clipboard!')
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast('Copied data to clipboard', 'success')
+    } catch (err) {
+      showToast(err.message || 'Failed to copy data', 'error')
+    }
   }
 
   const downloadData = (key, value) => {
@@ -79,13 +89,14 @@ function DatabaseViewer() {
     a.download = `${key}.json`
     a.click()
     URL.revokeObjectURL(url)
+    showToast(`${key}.json downloaded`, 'success')
   }
 
   return (
     <div className="management-section">
       <div className="section-header">
         <h2>🗄️ Database Viewer</h2>
-        <button className="btn-primary" onClick={fetchDatabaseData}>
+        <button className="btn-primary" onClick={() => fetchDatabaseData({ notify: true })}>
           🔄 Refresh Data
         </button>
       </div>

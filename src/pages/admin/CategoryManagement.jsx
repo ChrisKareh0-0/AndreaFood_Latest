@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import './Management.css'
-import { useToast } from '../../hooks/useToast'
-import { ToastContainer } from '../../components/Toast'
 
-function CategoryManagement() {
-  const { toasts, showToast, removeToast } = useToast()
+const noopToast = () => {}
+
+function CategoryManagement({ showToast = noopToast }) {
   const [categories, setCategories] = useState([
     { id: 1, name: 'TVC', description: 'Television Commercial projects', color: '#4a7ba7' },
     { id: 2, name: 'Photoshoot', description: 'Professional food photography', color: '#e89a3c' },
@@ -64,7 +63,6 @@ function CategoryManagement() {
 
   return (
     <div className="management-section">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="section-header">
         <h2>Category Management</h2>
         <button className="btn-primary" onClick={handleAdd}>
