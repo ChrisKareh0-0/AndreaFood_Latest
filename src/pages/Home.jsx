@@ -8,6 +8,7 @@ import { Filter, Instagram, Facebook, Mail, Phone } from 'lucide-react'
 
 const FOOTER_LOGO_SRC = '/andrea-foodstyle-monogram.png'
 const DEFAULT_SERVICE_IMAGES = ['/clients/site-content/services/services.jpg']
+const DEFAULT_SERVICES_DESCRIPTION = 'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat.'
 
 const buildImageSource = (sourceUrl, options) => {
   const source = typeof sourceUrl === 'string' ? sourceUrl.trim() : ''
@@ -20,13 +21,14 @@ const buildImageSource = (sourceUrl, options) => {
   }
 }
 
-function ImageWithFallback({ src, fallbackSrc = '', placeholder = null, ...props }) {
+function ImageWithFallback({ src, fallbackSrc = '', fallbackSrcs = [], placeholder = null, ...props }) {
   const [failedUrls, setFailedUrls] = useState([])
-  const currentSrc = src && !failedUrls.includes(src)
-    ? src
-    : fallbackSrc && !failedUrls.includes(fallbackSrc)
-      ? fallbackSrc
-      : ''
+  const candidates = [
+    src,
+    fallbackSrc,
+    ...(Array.isArray(fallbackSrcs) ? fallbackSrcs : [fallbackSrcs]),
+  ].filter(Boolean)
+  const currentSrc = candidates.find((candidate) => !failedUrls.includes(candidate)) || ''
 
   if (!currentSrc) return placeholder
 
@@ -41,6 +43,43 @@ function ImageWithFallback({ src, fallbackSrc = '', placeholder = null, ...props
       }}
     />
   )
+}
+
+const normalizeServiceSlides = (bioContent, fallbackDescription) => {
+  const data = bioContent && typeof bioContent === 'object' ? bioContent : {}
+  const servicesItems = Array.isArray(data.servicesItems) ? data.servicesItems : []
+  const slidesFromItems = servicesItems
+    .filter((item) => item && typeof item === 'object')
+    .map((item, index) => {
+      const imageUrl = typeof item.imageUrl === 'string'
+        ? item.imageUrl
+        : (typeof item.url === 'string' ? item.url : '')
+      const text = typeof item.text === 'string'
+        ? item.text
+        : (typeof item.description === 'string' ? item.description : fallbackDescription)
+
+      return {
+        id: item.id ?? `service-item-${index}`,
+        imageUrl,
+        text,
+      }
+    })
+    .filter((item) => item.imageUrl || item.text)
+
+  if (slidesFromItems.length > 0) {
+    return slidesFromItems
+  }
+
+  const configuredImages = Array.isArray(data.servicesImages)
+    ? data.servicesImages.filter(Boolean)
+    : []
+  const imageUrls = configuredImages.length > 0 ? configuredImages : DEFAULT_SERVICE_IMAGES
+
+  return imageUrls.map((imageUrl, index) => ({
+    id: `service-image-${index}-${imageUrl}`,
+    imageUrl,
+    text: fallbackDescription,
+  }))
 }
 
 const mergeSiteText = (incoming) => {
@@ -96,6 +135,20 @@ function Home() {
     return buildMediaPreviewUrl(sourceUrl, { width: 640, height: 640, quality: 68 }) || sourceUrl
   }
 
+  const getLatestWorkBackupImage = (index) => {
+    const clientImages = clients
+      .flatMap((client) => [
+        client?.thumbnailUrl,
+        client?.logo,
+        ...(Array.isArray(client?.images) ? client.images : []),
+      ])
+      .filter((url) => url && !isVideoUrl(url))
+
+    return clientImages[index % clientImages.length]
+      || DEFAULT_SERVICE_IMAGES[index % DEFAULT_SERVICE_IMAGES.length]
+      || ''
+  }
+
   const filteredClients = clients.filter(client => {
     const matchesCategory = activeFilter === 'All' || (client.categories && client.categories.includes(activeFilter));
     const matchesSearch = (client.name || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -117,7 +170,7 @@ function Home() {
   useEffect(() => {
     async function fetchAll() {
       try {
-        const res = await fetch('/api/home-data')
+        const res = await fetch('/api/home-data', { cache: 'no-store' })
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`)
         }
@@ -140,8 +193,7 @@ function Home() {
     'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat. Ut wisi enim ad minim veniam, quis nostrud exerci tation ullamcorper suscipit lobortis nisl ut aliquip ex ea commodo consequat.'
   const aboutParagraph2 = bioContent?.aboutParagraph2 ||
     'Duis autem vel eum iriure dolor in hendrerit in vulputate velit esse molestie consequat, vel illum dolore eu feugiat nulla facilisis at vero eros et accumsan et iusto odio dignissim qui blandit praesent luptatum zzril delenit augue duis dolore te feugait onummy nibh euismod tincidunt ut laoreet dolore.'
-  const servicesDescription = bioContent?.servicesDescription ||
-    'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat.'
+  const servicesDescription = bioContent?.servicesDescription || DEFAULT_SERVICES_DESCRIPTION
   const contactSubtitle = bioContent?.contactSubtitle || 'Ready to bring your culinary vision to life?'
   const contactDescription = bioContent?.contactDescription || "Let's discuss your next foodstyling project & create something truly mouth-watering."
 
@@ -189,22 +241,24 @@ function Home() {
 
   const aboutSectionImage = buildImageSource(bioContent?.aboutImage, { width: 900, height: 900, quality: 72 })
 
-  const configuredServicesImages = Array.isArray(bioContent?.servicesImages)
-    ? bioContent.servicesImages.filter(Boolean)
-    : []
-  const servicesImages = configuredServicesImages.length > 0 ? configuredServicesImages : DEFAULT_SERVICE_IMAGES
-  const currentServiceImage = servicesImages.length > 0
-    ? buildImageSource(servicesImages[currentServiceImageIndex], { width: 1200, height: 800, quality: 72 })
+  const serviceSlides = normalizeServiceSlides(bioContent, servicesDescription)
+  const currentServiceSlideIndex = serviceSlides.length > 0
+    ? ((currentServiceImageIndex % serviceSlides.length) + serviceSlides.length) % serviceSlides.length
+    : 0
+  const currentServiceSlide = serviceSlides[currentServiceSlideIndex] || { imageUrl: '', text: servicesDescription }
+  const activeServicesDescription = currentServiceSlide.text || servicesDescription
+  const currentServiceImage = currentServiceSlide.imageUrl
+    ? buildImageSource(currentServiceSlide.imageUrl, { width: 1200, height: 800, quality: 72 })
     : { src: '', fallbackSrc: '' }
 
   const handleNextServiceImage = () => {
-    if (servicesImages.length === 0) return
-    setCurrentServiceImageIndex((prev) => (prev + 1) % servicesImages.length)
+    if (serviceSlides.length === 0) return
+    setCurrentServiceImageIndex((prev) => (prev + 1) % serviceSlides.length)
   }
 
   const handlePrevServiceImage = () => {
-    if (servicesImages.length === 0) return
-    setCurrentServiceImageIndex((prev) => (prev - 1 + servicesImages.length) % servicesImages.length)
+    if (serviceSlides.length === 0) return
+    setCurrentServiceImageIndex((prev) => (prev - 1 + serviceSlides.length) % serviceSlides.length)
   }
 
   return (
@@ -264,17 +318,24 @@ function Home() {
             </p>
           </div>
           <div className="latest-work-grid">
-            {latestWorkPosts.map((post) => {
+            {latestWorkPosts.map((post, index) => {
               const postImage = buildImageSource(post.imageUrl, { width: 960, height: 540, quality: 72 })
+              const backupImage = buildImageSource(getLatestWorkBackupImage(index), { width: 960, height: 540, quality: 72 })
+              const imageSrc = postImage.src || backupImage.src
+              const fallbackSrcs = [
+                postImage.fallbackSrc,
+                backupImage.src,
+                backupImage.fallbackSrc,
+              ].filter(Boolean)
 
               return (
                 <article key={post.id} className="work-card">
                   <div className="work-image">
-                    {postImage.src ? (
+                    {imageSrc ? (
                       <ImageWithFallback
                         className="work-image-img"
-                        src={postImage.src}
-                        fallbackSrc={postImage.fallbackSrc}
+                        src={imageSrc}
+                        fallbackSrcs={fallbackSrcs}
                         alt={post.title}
                         loading="lazy"
                         decoding="async"
@@ -424,18 +485,26 @@ function Home() {
                 : renderWithOrangeFirstLetter(siteText.home.servicesTitle)}
             </h2>
             <p className="services-description">
-              {servicesDescription}
+              {activeServicesDescription}
             </p>
           </div>
           <div className="services-carousel">
-            <button className="carousel-btn prev" onClick={handlePrevServiceImage}>&lt;</button>
+            <button
+              type="button"
+              className="carousel-btn prev"
+              onClick={handlePrevServiceImage}
+              disabled={serviceSlides.length === 0}
+              aria-label="Previous service image"
+            >
+              &lt;
+            </button>
             <div className="services-image-container">
               <div className="services-image">
                 {currentServiceImage.src ? (
                   <ImageWithFallback
                     src={currentServiceImage.src}
                     fallbackSrc={currentServiceImage.fallbackSrc}
-                    alt={`Service ${currentServiceImageIndex + 1}`}
+                    alt={`Service ${currentServiceSlideIndex + 1}`}
                     className="service-carousel-img"
                     loading="lazy"
                     decoding="async"
@@ -445,8 +514,35 @@ function Home() {
                   <div className="placeholder-image large">{siteText.home.placeholderPicture}</div>
                 )}
               </div>
+              {serviceSlides.length > 1 ? (
+                <div className="services-carousel-meta" aria-live="polite">
+                  <span className="services-carousel-count">
+                    {currentServiceSlideIndex + 1} / {serviceSlides.length}
+                  </span>
+                  <div className="services-carousel-dots" aria-label="Service slide selector">
+                    {serviceSlides.map((slide, index) => (
+                      <button
+                        key={slide.id}
+                        type="button"
+                        className={`services-carousel-dot${index === currentServiceSlideIndex ? ' active' : ''}`}
+                        onClick={() => setCurrentServiceImageIndex(index)}
+                        aria-label={`Show service image ${index + 1}`}
+                        aria-current={index === currentServiceSlideIndex}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
-            <button className="carousel-btn next" onClick={handleNextServiceImage}>&gt;</button>
+            <button
+              type="button"
+              className="carousel-btn next"
+              onClick={handleNextServiceImage}
+              disabled={serviceSlides.length === 0}
+              aria-label="Next service image"
+            >
+              &gt;
+            </button>
           </div>
         </div>
       </section>

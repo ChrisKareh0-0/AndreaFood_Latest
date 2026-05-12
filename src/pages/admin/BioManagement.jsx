@@ -12,6 +12,7 @@ const emptyBioContent = {
   aboutImage: '',
   servicesDescription: '',
   servicesImages: [],
+  servicesItems: [],
   contactSubtitle: '',
   contactDescription: '',
 };
@@ -20,8 +21,48 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function normalizeServicesItems(value, fallbackImages = [], fallbackText = '') {
+  const fallbackDescription = typeof fallbackText === 'string' ? fallbackText : '';
+  const items = Array.isArray(value) ? value : [];
+  const normalizedItems = items
+    .filter((item) => isPlainObject(item))
+    .map((item, index) => {
+      const imageUrl = typeof item.imageUrl === 'string'
+        ? item.imageUrl
+        : (typeof item.url === 'string' ? item.url : '');
+      const text = typeof item.text === 'string'
+        ? item.text
+        : (typeof item.description === 'string' ? item.description : fallbackDescription);
+
+      return {
+        id: item.id ?? `service-item-${index}-${imageUrl}`,
+        imageUrl,
+        text,
+      };
+    })
+    .filter((item) => item.imageUrl || item.text || item.id);
+
+  if (normalizedItems.length > 0) {
+    return normalizedItems;
+  }
+
+  const images = Array.isArray(fallbackImages) ? fallbackImages.filter(Boolean) : [];
+
+  return images.map((imageUrl, index) => ({
+    id: `service-image-${index}-${imageUrl}`,
+    imageUrl,
+    text: fallbackDescription,
+  }));
+}
+
 function normalizeBioContent(value) {
   const data = isPlainObject(value) ? value : {};
+  const servicesDescription = data.servicesDescription || '';
+  const serviceItems = normalizeServicesItems(
+    data.servicesItems,
+    data.servicesImages,
+    servicesDescription
+  );
 
   return {
     ...emptyBioContent,
@@ -30,8 +71,11 @@ function normalizeBioContent(value) {
     aboutParagraph1: data.aboutParagraph1 || '',
     aboutParagraph2: data.aboutParagraph2 || '',
     aboutImage: data.aboutImage || '',
-    servicesDescription: data.servicesDescription || '',
-    servicesImages: Array.isArray(data.servicesImages) ? data.servicesImages.filter(Boolean) : [],
+    servicesDescription,
+    servicesImages: serviceItems.length > 0
+      ? serviceItems.map((item) => item.imageUrl).filter(Boolean)
+      : (Array.isArray(data.servicesImages) ? data.servicesImages.filter(Boolean) : []),
+    servicesItems: serviceItems,
     contactSubtitle: data.contactSubtitle || '',
     contactDescription: data.contactDescription || '',
   };
@@ -200,11 +244,22 @@ function BioManagement({ showToast = noopToast }) {
     try {
       setIsUploadingServicesImages(true);
       const results = await uploadMediaFiles(files, servicesMediaFolder);
-      const newUrls = results.map(r => r.url);
-      setFormData((prev) => ({
-        ...prev,
-        servicesImages: [...(prev.servicesImages || []), ...newUrls]
-      }));
+      setFormData((prev) => {
+        const servicesItems = [
+          ...normalizeServicesItems(prev.servicesItems, prev.servicesImages, prev.servicesDescription),
+          ...results.map((result, index) => ({
+            id: `service-upload-${Date.now()}-${index}`,
+            imageUrl: result.url,
+            text: prev.servicesDescription || '',
+          })),
+        ];
+
+        return {
+          ...prev,
+          servicesItems,
+          servicesImages: servicesItems.map((item) => item.imageUrl).filter(Boolean),
+        };
+      });
       showToast(`${results.length} service image${results.length === 1 ? '' : 's'} uploaded successfully`, 'success');
     } catch (err) {
       console.error('Failed to upload services images', err);
@@ -214,11 +269,57 @@ function BioManagement({ showToast = noopToast }) {
     }
   };
 
-  const handleRemoveServicesImage = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      servicesImages: (prev.servicesImages || []).filter((_, i) => i !== index)
-    }));
+  const handleAddServiceSlide = () => {
+    setFormData((prev) => {
+      const servicesItems = [
+        ...normalizeServicesItems(prev.servicesItems, prev.servicesImages, prev.servicesDescription),
+        {
+          id: `service-manual-${Date.now()}`,
+          imageUrl: '',
+          text: prev.servicesDescription || '',
+        },
+      ];
+
+      return {
+        ...prev,
+        servicesItems,
+        servicesImages: servicesItems.map((item) => item.imageUrl).filter(Boolean),
+      };
+    });
+  };
+
+  const handleServiceItemChange = (id, field, value) => {
+    setFormData((prev) => {
+      const servicesItems = normalizeServicesItems(
+        prev.servicesItems,
+        prev.servicesImages,
+        prev.servicesDescription
+      ).map((item) => (
+        item.id === id ? { ...item, [field]: value } : item
+      ));
+
+      return {
+        ...prev,
+        servicesItems,
+        servicesImages: servicesItems.map((item) => item.imageUrl).filter(Boolean),
+      };
+    });
+  };
+
+  const handleRemoveServicesImage = (id) => {
+    setFormData((prev) => {
+      const servicesItems = normalizeServicesItems(
+        prev.servicesItems,
+        prev.servicesImages,
+        prev.servicesDescription
+      ).filter((item) => item.id !== id);
+
+      return {
+        ...prev,
+        servicesItems,
+        servicesImages: servicesItems.map((item) => item.imageUrl).filter(Boolean),
+      };
+    });
   };
 
   const handleAddLatestWorkPost = () => {
@@ -250,19 +351,27 @@ function BioManagement({ showToast = noopToast }) {
       aboutImage,
       servicesDescription,
       servicesImages,
+      servicesItems,
       contactSubtitle,
       contactDescription,
       siteText: nextSiteText,
       latestWorkPosts: nextLatestWorkPosts,
     } = formData;
+    const normalizedServicesItems = normalizeServicesItems(
+      servicesItems,
+      servicesImages,
+      servicesDescription
+    );
+    const normalizedServicesDescription = servicesDescription || normalizedServicesItems[0]?.text || '';
 
     const nextBio = normalizeBioContent({
       aboutTitle,
       aboutParagraph1,
       aboutParagraph2,
       aboutImage,
-      servicesDescription,
-      servicesImages,
+      servicesDescription: normalizedServicesDescription,
+      servicesImages: normalizedServicesItems.map((item) => item.imageUrl).filter(Boolean),
+      servicesItems: normalizedServicesItems,
       contactSubtitle,
       contactDescription,
     });
@@ -319,6 +428,17 @@ function BioManagement({ showToast = noopToast }) {
     return <div className="management-section"><div>Loading bio content...</div></div>;
   }
 
+  const contentServiceItems = normalizeServicesItems(
+    content?.servicesItems,
+    content?.servicesImages,
+    content?.servicesDescription
+  );
+  const formServiceItems = normalizeServicesItems(
+    formData.servicesItems,
+    formData.servicesImages,
+    formData.servicesDescription
+  );
+
   return (
     <div className="management-section">
       <div className="section-header">
@@ -347,18 +467,30 @@ function BioManagement({ showToast = noopToast }) {
               </div>
             </div>
             <div className="content-section">
-              <h3>Services Description</h3>
+              <h3>Services Carousel</h3>
               <div className="content-preview">
                 <p>{content?.servicesDescription || 'No services description available.'}</p>
-                {content?.servicesImages && content.servicesImages.length > 0 && (
-                  <div className="image-grid-preview" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '1rem' }}>
-                    {content.servicesImages.map((img, idx) => (
-                      <div key={idx} className="image-preview image-preview--compact">
-                        <img src={img} alt={`Service ${idx + 1}`} />
+                {contentServiceItems.length > 0 ? (
+                  <div className="service-slide-preview-list">
+                    {contentServiceItems.map((item, idx) => (
+                      <div key={item.id} className="service-slide-preview-item">
+                        <div className="service-slide-preview-media">
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt={`Service slide ${idx + 1}`} />
+                          ) : (
+                            <span>No image</span>
+                          )}
+                        </div>
+                        <div>
+                          <h4>Slide {idx + 1}</h4>
+                          <p className="service-slide-text">
+                            {item.text || content?.servicesDescription || 'No slide text available.'}
+                          </p>
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
             <div className="content-section">
@@ -450,16 +582,15 @@ function BioManagement({ showToast = noopToast }) {
               <div className="form-card">
                 <h3>Services Section</h3>
                 <div className="form-group">
-                  <label>Services Description</label>
+                  <label>Default Services Description</label>
                   <textarea
-                    value={formData.servicesDescription}
+                    value={formData.servicesDescription || ''}
                     onChange={(e) => setFormData({ ...formData, servicesDescription: e.target.value })}
                     rows="4"
-                    required
                   ></textarea>
                 </div>
                 <div className="form-group">
-                  <label>Services Carousel Images</label>
+                  <label>Services Carousel Slides</label>
                   <div className="file-upload-container">
                     <label className="file-upload-btn">
                       📁 Upload Service Images
@@ -473,37 +604,59 @@ function BioManagement({ showToast = noopToast }) {
                     </label>
                     {isUploadingServicesImages ? <span style={{ marginLeft: '0.75rem' }}>Uploading...</span> : null}
                   </div>
-                  {formData.servicesImages && formData.servicesImages.length > 0 && (
-                    <div className="image-management-grid" style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginTop: '1rem' }}>
-                      {formData.servicesImages.map((img, idx) => (
-                        <div key={idx} className="image-preview image-preview--compact" style={{ position: 'relative' }}>
-                          <img src={img} alt={`Service ${idx + 1}`} />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleAddServiceSlide}
+                    style={{ marginTop: '1rem' }}
+                  >
+                    Add Slide Manually
+                  </button>
+
+                  {formServiceItems.length > 0 ? (
+                    <div className="service-slides-list">
+                      {formServiceItems.map((item, idx) => (
+                        <div key={item.id} className="service-slide-editor">
+                          <div className="service-slide-editor__preview">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt={`Service slide ${idx + 1}`} />
+                            ) : (
+                              <span>No image</span>
+                            )}
+                          </div>
+                          <div className="service-slide-editor__body">
+                            <div className="form-group">
+                              <label>Slide {idx + 1} Image URL</label>
+                              <input
+                                type="text"
+                                value={item.imageUrl || ''}
+                                onChange={(e) => handleServiceItemChange(item.id, 'imageUrl', e.target.value)}
+                                placeholder="Enter image URL or upload images above"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label>Slide {idx + 1} Text</label>
+                              <textarea
+                                value={item.text || ''}
+                                onChange={(e) => handleServiceItemChange(item.id, 'text', e.target.value)}
+                                rows="4"
+                                placeholder="Text shown next to this carousel image"
+                              ></textarea>
+                            </div>
+                          </div>
                           <button
                             type="button"
-                            className="btn-delete-small"
-                            onClick={() => handleRemoveServicesImage(idx)}
-                            style={{
-                              position: 'absolute',
-                              top: '-8px',
-                              right: '-8px',
-                              background: '#ff4d4f',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '50%',
-                              width: '20px',
-                              height: '20px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '12px'
-                            }}
+                            className="service-slide-editor__remove"
+                            onClick={() => handleRemoveServicesImage(item.id)}
+                            aria-label={`Remove service slide ${idx + 1}`}
                           >
                             ×
                           </button>
                         </div>
                       ))}
                     </div>
+                  ) : (
+                    <p className="service-slides-empty">Upload service images or add a slide manually.</p>
                   )}
                 </div>
               </div>
